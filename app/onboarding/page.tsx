@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Building2, MapPin, User, Briefcase, ArrowRight } from 'lucide-react'
 import { useAuth } from '@/components/auth-provider'
 import { buttonClass } from '@/components/ledger-ui'
@@ -16,6 +16,12 @@ export default function OnboardingPage() {
   const [location, setLocation] = useState(business.location || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!ownerName && (user?.name || business.ownerName)) {
+      setOwnerName(user?.name || business.ownerName || '')
+    }
+  }, [user?.name, business.ownerName, ownerName])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

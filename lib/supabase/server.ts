@@ -81,7 +81,7 @@ export async function ensureProfileExists(
       owner_name: initialData?.ownerName || '',
       business_type: initialData?.businessType || '',
       location: initialData?.location || '',
-      opening_balance: initialData?.openingBalance ?? 0,
+      opening_balance: initialData?.openingBalance !== undefined ? initialData.openingBalance : 1000,
       language: initialData?.language || 'en-IN',
     }
 

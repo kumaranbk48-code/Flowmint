@@ -51,8 +51,8 @@ export const TODAY = toISO(new Date())
 export const WEEK_START = addDays(TODAY, -((new Date().getDay() + 6) % 7))
 export const PAYDAY = addDays(WEEK_START, 5)
 
-export const DEFAULT_OPENING_BALANCE = 0
-export const DEFAULT_OPENING_CASH = 0
+export const DEFAULT_OPENING_BALANCE = 1000
+export const DEFAULT_OPENING_CASH = 1000
 
 export const EXPENSE_CATEGORIES = [
   'Client Payment',

@@ -57,7 +57,7 @@ export async function POST(req: Request) {
       ownerName: meta.ownerName || meta.name,
       businessType: meta.businessType,
       location: meta.location,
-      openingBalance: meta.opening_balance ? Number(meta.opening_balance) : 0,
+      openingBalance: meta.opening_balance !== undefined ? Number(meta.opening_balance) : 1000,
     })
 
     const user = {

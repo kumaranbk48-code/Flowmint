@@ -24,7 +24,7 @@ export async function POST(req: Request) {
       ownerName: meta.ownerName || meta.name,
       businessType: meta.businessType,
       location: meta.location,
-      openingBalance: meta.opening_balance ? Number(meta.opening_balance) : 0,
+      openingBalance: meta.opening_balance !== undefined ? Number(meta.opening_balance) : 1000,
     })
 
     const business = {
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
         isGoogle: !!meta.isGoogle,
       },
       business,
-      openingBalance: profile?.opening_balance !== undefined ? Number(profile.opening_balance) : 0,
+      openingBalance: profile?.opening_balance !== undefined ? Number(profile.opening_balance) : 1000,
       onboardingCompleted: !!(business.businessName && business.ownerName) || !!meta.onboardingCompleted,
     })
   } catch (err) {

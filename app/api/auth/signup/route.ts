@@ -82,7 +82,7 @@ export async function POST(req: Request) {
       businessName: '',
       businessType: '',
       location: '',
-      openingBalance: 0,
+      openingBalance: 1000,
     })
 
     const newUser = {

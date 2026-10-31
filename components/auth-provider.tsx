@@ -169,15 +169,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!isReady) return
 
     const isPublic = isPublicRoute(pathname)
+    const hasBusinessSetup = Boolean(business?.businessName && business.businessName.trim().length > 0)
 
     // When unauthenticated, redirect to /login only if NOT on a public route
     if (!user && !isPublic) {
       router.replace('/login')
-    } else if (user && (pathname === '/login' || pathname === '/signup')) {
-      // If already authenticated and visiting login/signup, go to dashboard
-      router.replace('/')
+    } else if (user) {
+      if (!hasBusinessSetup) {
+        // If business setup is incomplete, ensure user stays on /onboarding
+        if (pathname !== '/onboarding' && pathname !== '/privacy' && pathname !== '/terms') {
+          router.replace('/onboarding')
+        }
+      } else if (pathname === '/login' || pathname === '/signup' || pathname === '/onboarding') {
+        // If business setup is complete, visiting auth or onboarding routes redirects to dashboard
+        router.replace('/')
+      }
     }
-  }, [isReady, user, pathname, router])
+  }, [isReady, user, business, pathname, router])
 
   const login = useCallback(
     async (email: string, password?: string) => {

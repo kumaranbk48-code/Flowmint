@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowRight, Check, UserRound } from 'lucide-react'
 import { useLedger } from '@/components/ledger-provider'
@@ -26,6 +26,14 @@ export default function SettingsPage() {
   const [autoSpeechPrompt, setAutoSpeechPrompt] = useState(true)
   const [savedSuccess, setSavedSuccess] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+
+  useEffect(() => {
+    setBalanceInput(String(openingBalance))
+  }, [openingBalance])
+
+  useEffect(() => {
+    setCashInput(String(openingCash))
+  }, [openingCash])
 
   const handleSaveFinances = (e: React.FormEvent) => {
     e.preventDefault()
