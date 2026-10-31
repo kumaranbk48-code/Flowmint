@@ -1,0 +1,38 @@
+# Environment variables
+.env
+.env.*
+.env*.local
+!.env.example
+
+# Next.js build and cache
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+
+# Dependencies
+node_modules/
+
+# Logs & testing traces
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.playwright-mcp/
+
+# Editor & OS files
+.DS_Store
+*.pem
+.idea/
+.vscode/
+
+# Sandbox / cache internals
+__v0_runtime_loader.js
+__v0_devtools.tsx
+__v0_jsx-dev-runtime.ts
+.snowflake/
+.design-cache/
+.v0-trash/
+.vercel/
