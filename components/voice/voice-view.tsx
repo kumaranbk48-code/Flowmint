@@ -326,8 +326,10 @@ export function VoiceView() {
       })
 
       setStage({ kind: 'saved', tx: saved })
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to confirm and save transaction:', err)
+      const msg = err instanceof Error ? err.message : 'Failed to save transaction.'
+      alert(msg)
     } finally {
       setIsSaving(false)
     }
@@ -383,7 +385,7 @@ export function VoiceView() {
                   <div>
                     <p className="font-semibold">Voice requires internet connection</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                      You can add transactions manually from the Dashboard with 100% offline local saving.
+                      You can add transactions manually from the Dashboard with local device saving.
                     </p>
                   </div>
                 </div>

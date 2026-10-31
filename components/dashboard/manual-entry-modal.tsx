@@ -163,8 +163,9 @@ export function ManualEntryModal({
       })
 
       handleClose()
-    } catch {
-      setError('Failed to save transaction to database. Please try again.')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save transaction. Please try again.'
+      setError(msg)
     } finally {
       setIsSaving(false)
     }

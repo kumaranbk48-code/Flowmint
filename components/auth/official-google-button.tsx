@@ -86,7 +86,7 @@ export function OfficialGoogleButton({
   onError,
 }: {
   mode?: 'login' | 'signup'
-  onSuccess: (profile: GoogleUserProfile) => void
+  onSuccess: (profile: GoogleUserProfile) => Promise<void> | void
   onError?: (errMessage: string) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -97,15 +97,22 @@ export function OfficialGoogleButton({
   const initializedRef = useRef(false)
 
   const handleCredential = useCallback(
-    (credential: string) => {
+    async (credential: string) => {
       setLoading(true)
       const profile = decodeGoogleJwt(credential)
       if (profile) {
-        onSuccess({
-          ...profile,
-          credential,
-          idToken: credential,
-        })
+        try {
+          await onSuccess({
+            ...profile,
+            credential,
+            idToken: credential,
+          })
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : 'Google sign-in failed. Please try again.'
+          onError?.(msg)
+        } finally {
+          setLoading(false)
+        }
       } else {
         onError?.('Could not extract user details from Google credentials.')
         setLoading(false)
@@ -122,18 +129,20 @@ export function OfficialGoogleButton({
         const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: { Authorization: `Bearer ${accessToken}` },
         })
-        if (!res.ok) throw new Error('Failed to fetch user info')
+        if (!res.ok) throw new Error('Failed to fetch user info from Google.')
         const info = await res.json()
-        onSuccess({
+        await onSuccess({
           id: info.sub || `google_${Date.now()}`,
           name: info.name || `${info.given_name || ''} ${info.family_name || ''}`.trim() || 'Google User',
           email: info.email,
           picture: info.picture,
           accessToken,
         })
-      } catch (e) {
+      } catch (e: unknown) {
         console.error('Failed to fetch Google user info:', e)
-        onError?.('Failed to fetch profile details from Google.')
+        const msg = e instanceof Error ? e.message : 'Failed to fetch profile details from Google.'
+        onError?.(msg)
+      } finally {
         setLoading(false)
       }
     },

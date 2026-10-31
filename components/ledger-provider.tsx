@@ -10,7 +10,7 @@ import {
   type Transaction,
   type Worker,
 } from '@/lib/data'
-import { workerDue } from '@/lib/ledger'
+import { workerDue, getFinancialSummary } from '@/lib/ledger'
 import { useAuth } from '@/components/auth-provider'
 
 export type NewProjectInput = {
@@ -412,6 +412,29 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
   const addTransaction = useCallback(
     async (tx: Omit<Transaction, 'id'>) => {
+      // Validate that expense does not cause net cash balance to drop below 0
+      if (tx.type !== 'income') {
+        const txDate = tx.date || TODAY
+        const dateOpening = getOpeningBalanceForDate(txDate)
+        const summary = getFinancialSummary(
+          transactions.filter((t) => t.date === txDate),
+          dateOpening,
+          openingCash,
+        )
+
+        if (tx.method === 'cash' && tx.amount > summary.currentCash) {
+          throw new Error(
+            `Cannot add expense of ₹${tx.amount.toLocaleString('en-IN')}. Available cash in hand is only ₹${summary.currentCash.toLocaleString('en-IN')}. Net cash balance cannot go below ₹0.`,
+          )
+        }
+
+        if (tx.amount > summary.netBalance) {
+          throw new Error(
+            `Cannot add expense of ₹${tx.amount.toLocaleString('en-IN')}. Available net balance is only ₹${summary.netBalance.toLocaleString('en-IN')}. Net balance cannot go below ₹0.`,
+          )
+        }
+      }
+
       const now = new Date()
       const hours = now.getHours()
       const minutes = String(now.getMinutes()).padStart(2, '0')
@@ -426,7 +449,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         time: tx.time || defaultTime,
       }
 
-      // 1. Immediate Local State & Storage update (works 100% offline)
+      // 1. Immediate Local State & Storage update
       setTransactions((prev) => {
         const next = [created, ...prev]
         if (typeof window !== 'undefined') {

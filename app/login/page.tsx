@@ -47,12 +47,15 @@ export default function LoginPage() {
         </div>
 
         {error ? (
-          <div className="mt-5 rounded-lg bg-destructive/10 px-3.5 py-2.5 text-xs font-medium text-destructive">
-            <span>{error}</span>
-            {error.includes('Please sign up') && (
-              <span className="ml-1 font-semibold underline">
-                <Link href="/signup">Sign up now</Link>
-              </span>
+          <div className="mt-5 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5 text-xs font-medium text-destructive">
+            <p className="font-semibold">{error}</p>
+            {error.toLowerCase().includes('sign up') && (
+              <p className="mt-2 pt-2 border-t border-destructive/20 text-foreground">
+                Don&apos;t have an account yet?{' '}
+                <Link href="/signup" className="font-bold text-primary underline hover:text-primary/90">
+                  Click here to Sign Up
+                </Link>
+              </p>
             )}
           </div>
         ) : null}
@@ -73,7 +76,10 @@ export default function LoginPage() {
                 setLoading(false)
               }
             }}
-            onError={(err) => setError(err)}
+            onError={(err) => {
+              setError(err)
+              setLoading(false)
+            }}
           />
         </div>
 

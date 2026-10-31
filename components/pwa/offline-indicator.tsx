@@ -39,7 +39,7 @@ export function OfflineIndicator() {
       </div>
 
       <span className="text-[11px] font-normal text-muted-foreground hidden sm:inline">
-        {!isOnline ? 'Manual entry & reports work 100% offline' : 'Cloud sync active'}
+        {!isOnline ? 'Manual entry & reports saved locally' : 'Cloud sync active'}
       </span>
     </div>
   )

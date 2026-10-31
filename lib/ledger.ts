@@ -18,7 +18,7 @@ export function summarise(txs: Transaction[]) {
   const received = txs.filter((t) => t.type === 'income').reduce((sum, t) => sum + t.amount, 0)
   const spent = txs.filter((t) => t.type !== 'income').reduce((sum, t) => sum + t.amount, 0)
   const workerPayments = txs.filter((t) => isWorkerPayment(t)).reduce((sum, t) => sum + t.amount, 0)
-  const net = received - spent
+  const net = Math.max(0, received - spent)
   return {
     received,
     spent,
@@ -111,7 +111,7 @@ export function computeRunningBalances(
     }
     return {
       ...tx,
-      balanceAfter: running,
+      balanceAfter: Math.max(0, running),
     }
   })
 }
@@ -129,7 +129,7 @@ export function getFinancialSummary(
     .filter((t) => t.type !== 'income')
     .reduce((sum, t) => sum + t.amount, 0)
 
-  const netBalance = openingBalance + creditReceived - debitSpent
+  const netBalance = Math.max(0, openingBalance + creditReceived - debitSpent)
 
   // Cash on hand
   const cashIn = txs
@@ -139,7 +139,7 @@ export function getFinancialSummary(
     .filter((t) => t.type !== 'income' && t.method === 'cash')
     .reduce((sum, t) => sum + t.amount, 0)
 
-  const currentCash = openingCash + cashIn - cashOut
+  const currentCash = Math.max(0, openingCash + cashIn - cashOut)
 
   return {
     openingBalance,

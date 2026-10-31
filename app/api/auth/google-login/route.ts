@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     if (!existingUser) {
       return NextResponse.json(
         {
-          error: 'No account found with this email. Please sign up first.',
+          error: `No FlowMint account found for ${trimmedEmail}. Please sign up first.`,
         },
         { status: 404 },
       )

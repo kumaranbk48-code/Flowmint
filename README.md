@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/TailwindCSS-v4-38bdf8?logo=tailwindcss" alt="Tailwind CSS" />
   <img src="https://img.shields.io/badge/Supabase-PostgreSQL-3ecf8e?logo=supabase" alt="Supabase" />
   <img src="https://img.shields.io/badge/Google%20Gemini-Multimodal%20AI-4285f4?logo=google" alt="Google Gemini" />
-  <img src="https://img.shields.io/badge/PWA-100%25%20Offline%20Ready-c45a2c" alt="PWA" />
+  <img src="https://img.shields.io/badge/PWA-Offline%20Ready-c45a2c" alt="PWA" />
 </p>
 
 ---
@@ -24,7 +24,7 @@
 - [Overview](#overview)
 - [Key Features](#key-features)
 - [Architecture & Tech Stack](#architecture--tech-stack)
-- [PWA & 100% Offline Support](#pwa--100-offline-support)
+- [PWA & Offline Support](#pwa--offline-support)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
@@ -41,14 +41,14 @@
 
 Managing cash flow across multiple active construction sites, daily material purchases, worker wages, and client payments can be messy. **FlowMint** replaces manual pocket diaries with a streamlined digital cashbook. 
 
-Contractors can speak naturally in English, Tamil, or Hindi to record site expenses, or manage transactions 100% offline via manual entry with instant local device storage and automatic cloud synchronization.
+Contractors can speak naturally in English, Tamil, or Hindi to record site expenses, or manage transactions offline via manual entry with instant local device storage and automatic cloud synchronization.
 
 ---
 
 ## Key Features
 
 * **Voice Ledger Entry (Multimodal Gemini AI)**: Speak naturally (e.g. *"Received 10,000 from Sharma Residence"* or *"Paid 4,500 for cement"*). Audio is processed through Google Gemini AI to extract transaction types, amounts, categories, and project mappings.
-* **100% Offline-First PWA**: Install FlowMint directly to your Android, iOS, or desktop home screen. Launch and use the app with 0ms delay even without internet; manual entries save locally and sync to the cloud automatically upon reconnection.
+* **Offline-First PWA**: Install FlowMint directly to your Android, iOS, or desktop home screen. Launch and use the app with 0ms delay even without internet; manual entries save locally and sync to the cloud automatically upon reconnection.
 * **Multi-Project Management**: Track contract values, client advance payments, material expenses, and pending balances independently across all active projects.
 * **Live Cash-in-Hand Counter**: Distinguish between bank/UPI transfers and physical cash in hand on site with opening balance overrides.
 * **Reports & One-Click CSV Export**: Filter finances by date range (Today, 7 Days, 30 Days, Custom) or by project, and download professional CSV cashbook spreadsheets.
@@ -70,7 +70,7 @@ Contractors can speak naturally in English, Tamil, or Hindi to record site expen
 
 ---
 
-## PWA & 100% Offline Support
+## PWA & Offline Support
 
 FlowMint is engineered with a **local-first** approach:
 

@@ -9,7 +9,6 @@ import { isActive, primaryNav, secondaryNav } from './nav-items'
 import { useAuth } from '@/components/auth-provider'
 import { FlowMintLogo } from '@/components/logo'
 import { OfflineIndicator } from '@/components/pwa/offline-indicator'
-import { InstallPwaBanner, InstallMenuItem } from '@/components/pwa/install-pwa-banner'
 
 function Brand() {
   const { business } = useAuth()
@@ -176,7 +175,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <nav aria-label="Account" className="flex flex-col gap-3">
           <SecondaryList pathname={pathname} />
-          <InstallMenuItem />
           <UserCard />
         </nav>
       </aside>
@@ -220,14 +218,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
           <nav aria-label="Account" className="flex flex-col gap-3">
             <SecondaryList pathname={pathname} onNavigate={closeDrawer} />
-            <InstallMenuItem onNavigate={closeDrawer} />
             <UserCard />
           </nav>
         </div>
       </dialog>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <InstallPwaBanner />
         <OfflineIndicator />
         <main className="min-w-0 pb-28 lg:pb-0">{children}</main>
       </div>
