@@ -2,16 +2,24 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: '/?source=pwa',
     name: 'FlowMint — Contractor Cashbook',
     short_name: 'FlowMint',
     description: 'Focused financial assistant and daily cashbook for building contractors.',
-    start_url: '/',
+    start_url: '/?source=pwa',
+    scope: '/',
     display: 'standalone',
+    display_override: ['window-controls-overlay', 'standalone', 'minimal-ui'],
     background_color: '#f8f6f3',
     theme_color: '#c45a2c',
     orientation: 'portrait-primary',
-    scope: '/',
-    categories: ['finance', 'business', 'productivity'],
+    lang: 'en',
+    dir: 'ltr',
+    categories: ['finance', 'business', 'productivity', 'utilities'],
+    prefer_related_applications: false,
+    launch_handler: {
+      client_mode: ['navigate-existing', 'auto'],
+    },
     icons: [
       {
         src: '/icon-192.png',
@@ -38,6 +46,60 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: 'any',
       },
     ],
+    screenshots: [
+      {
+        src: '/screenshot-desktop.png',
+        sizes: '1280x720',
+        type: 'image/png',
+        form_factor: 'wide',
+        label: 'FlowMint Contractor Dashboard & Cashbook Desktop View',
+      },
+      {
+        src: '/screenshot-mobile.png',
+        sizes: '390x844',
+        type: 'image/png',
+        form_factor: 'narrow',
+        label: 'FlowMint Daily Cashflow Tracking on Mobile',
+      },
+    ],
+    shortcuts: [
+      {
+        name: 'Add Cash Entry',
+        short_name: 'Add Entry',
+        description: 'Quickly record a payment or site expense',
+        url: '/?action=add',
+        icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+      },
+      {
+        name: 'Voice Recording',
+        short_name: 'Voice Log',
+        description: 'Speak in Tamil or English to log entries',
+        url: '/voice',
+        icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+      },
+      {
+        name: 'Financial Reports',
+        short_name: 'Reports',
+        description: 'View daily and monthly cash flow reports',
+        url: '/reports',
+        icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+      },
+      {
+        name: 'Active Projects',
+        short_name: 'Projects',
+        description: 'Manage contractor construction projects',
+        url: '/projects',
+        icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+      },
+    ],
+    share_target: {
+      action: '/?action=share',
+      method: 'GET',
+      params: {
+        title: 'title',
+        text: 'text',
+        url: 'url',
+      },
+    },
   }
 }
-

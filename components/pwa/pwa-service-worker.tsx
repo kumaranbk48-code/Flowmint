@@ -11,7 +11,7 @@ export function PwaServiceWorker() {
     // Register service worker after window load for peak performance
     const registerSW = () => {
       navigator.serviceWorker
-        .register('/sw.js')
+        .register('/sw.js', { scope: '/' })
         .then((registration) => {
           if (process.env.NODE_ENV === 'development') {
             console.log('[FlowMint PWA] Service worker registered with scope:', registration.scope)

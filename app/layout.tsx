@@ -70,6 +70,24 @@ export default function RootLayout({
     <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
       <body className="antialiased">
         <PwaServiceWorker />
+        <Script
+          id="flowmint-sw-register"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                    .catch(function(err) { console.warn('[FlowMint SW]', err); });
+                });
+                if (document.readyState === 'complete') {
+                  navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                    .catch(function(err) { console.warn('[FlowMint SW]', err); });
+                }
+              }
+            `,
+          }}
+        />
         <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" />
         <AuthProvider>
           <LedgerProvider>
