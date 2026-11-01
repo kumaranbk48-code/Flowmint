@@ -52,11 +52,13 @@ export async function POST(req: Request) {
     // 4. Try local instant parse first
     let parsed = parseVoiceEntry(safeTranscript, projectList)
 
-    // 5. If amount is missing or sentence was spoken in Tamil / Tanglish / Hindi, use Gemini AI
+    // 5. If amount is missing, sentence is non-English, or category needs AI classification, use Gemini AI
     const apiKey = process.env.GEMINI_API_KEY
-    if ((!parsed.amount || parsed.missingProject) && apiKey) {
+    const hasIndicSpeech = /\b(irunthu|vangi|vaangi|vanginen|vaanginen|vangirukken|vaangirukken|kuduthen|koduthen|kuduthanga|selavu|latcham|aayiram|roobai|rubai|kaaviyukku|kaaviya|mila|diya|pachas|hazar|ek|do|teen|chaar|paanch)\b/i.test(safeTranscript)
+
+    if (apiKey && (!parsed.amount || parsed.category === 'Other' || parsed.missingProject || hasIndicSpeech)) {
       try {
-        const prompt = `You are a ledger extraction assistant for an Indian building contractor.
+        const prompt = `You are an expert ledger extraction assistant for an Indian building contractor.
 Extract the transaction details from this speech transcript (which may be in English, Tamil, Tanglish, or Hindi):
 "${safeTranscript}"
 
@@ -65,8 +67,11 @@ Available Projects: ${JSON.stringify(
         )}
 
 Rules:
-- Understand Indian numbers (e.g. Tamil: "pathayiram"=10000, "anjaayiram"=5000, "rendaayiram"=2000, "latcham"=100000; Hindi: "pachas hazar"=50000).
-- Understand Indian action words (e.g. Tamil: "vangune/vaanginen"=income, "kuduthen/selavu"=expense; Hindi: "mila"=income, "diya"=expense).
+- Understand Indian numbers (e.g. Tamil: "pathayiram"=10000, "anjaayiram"=5000, "rendaayiram"=2000, "latcham"/"latcham"=100000, "moonu latcham"=300000; Hindi: "pachas hazar"=50000, "ek lakh"=100000).
+- Understand Indian action words:
+  * Tamil: "vangi irukken" / "vaanginen" / "kitta irunthu vangi" = INCOME (credit). Example: "kaaviyukku irunthu moonu latcham vangi irukken" -> type: "income", amount: 300000, party: "Kaaviya", category: "Client Payment", method: "cash".
+  * Tamil: "kuduthen" / "selavu" / "vechurukken" = EXPENSE (debit). Example: "paid eight thousand to workers" -> type: "expense", amount: 8000, party: "Site Workers", category: "Worker Payment", method: "cash".
+  * Hindi: "mila" / "aaya" = INCOME. "diya" / "kharcha" = EXPENSE.
 - Do NOT invent or hallucinate third-party personal contact names.
 - Output JSON ONLY in this format:
 {

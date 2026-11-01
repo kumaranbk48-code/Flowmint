@@ -136,6 +136,20 @@ function extractSpokenParty(
     }
   }
 
+  // 1b. Tamil "<party> kitta irunthu" or "<party> ukku irunthu" (e.g. "kaaviyukku irunthu", "ravi kitta irunthu")
+  const tamilFromMatch = original.match(/\b([A-Za-z0-9'-]+?)(?:ukku|kku|idam)?\s*(?:kitta\s*)?irunthu\b/i)
+  if (tamilFromMatch && tamilFromMatch[1].trim()) {
+    const rawParty = tamilFromMatch[1].trim()
+    let cleaned = rawParty.charAt(0).toUpperCase() + rawParty.slice(1).toLowerCase()
+    if (cleaned.toLowerCase().endsWith('y')) {
+      cleaned = cleaned + 'a'
+    }
+    const ignoreList = ['anga', 'inga', 'site', 'bank', 'office']
+    if (cleaned && !ignoreList.includes(cleaned.toLowerCase())) {
+      return cleaned
+    }
+  }
+
   // 2. Explicit "in/at <vendor>" (e.g. "in tea shop", "at petrol bunk", "at bakery")
   const inAtMatch = original.match(/\b(?:in|at)\s+(?:the\s+)?([A-Za-z0-9\s&'-]+?)(?:\s+(?:for|towards|on|by|via|\d|\$|₹|rs\.?|$))/i)
   if (inAtMatch && inAtMatch[1].trim()) {
@@ -177,7 +191,11 @@ export function parseVoiceEntry(transcript: string, projects: Project[] = []): P
   let type: TxType = 'expense'
   const isIncome =
     /\b(received|receive|credited|advance from|payment from|client paid|credit)\b/i.test(text) ||
-    /\bgot\s+(?:advance|payment|money|cash|cheque|transfer|amount)\b/i.test(text)
+    /\bgot\s+(?:advance|payment|money|cash|cheque|transfer|amount)\b/i.test(text) ||
+    /\b(vangi|vaangi|vanginen|vaanginen|vangirukken|vaangirukken|vangunen|vaangunen|vangiyullom|vangiyachu|vaangiyachu)\b/i.test(text) ||
+    /\b(vandhadhu|vanthathu|vandhuchu|vanthuchu|koduthanga|kuduthanga|kodutharu|kudutharu|thantanga|thandhanga)\b/i.test(text) ||
+    /\b(?:irunthu|idamirunthu|kitta)\s+.+?\s*(?:vangi|vaangi|vanginen|vaanginen|vangirukken|vaangirukken)\b/i.test(text) ||
+    /\b(mila|mile|aaya|aaye|liya|prapt)\b/i.test(text)
 
   if (isIncome) {
     type = 'income'

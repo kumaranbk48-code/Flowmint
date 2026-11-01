@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DEFAULT_OPENING_BALANCE,
   DEFAULT_OPENING_CASH,
@@ -77,6 +77,28 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
   const [isOnline, setIsOnline] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
   const [pendingSyncCount, setPendingSyncCount] = useState(0)
+
+  // Refs to guarantee fresh synchronous access inside callbacks without stale closures
+  const transactionsRef = useRef<Transaction[]>(transactions)
+  const openingCashRef = useRef<number>(openingCash)
+  const openingBalanceRef = useRef<number>(openingBalance)
+  const dailyOpeningBalancesRef = useRef<Record<string, number>>(dailyOpeningBalances)
+
+  useEffect(() => {
+    transactionsRef.current = transactions
+  }, [transactions])
+
+  useEffect(() => {
+    openingCashRef.current = openingCash
+  }, [openingCash])
+
+  useEffect(() => {
+    openingBalanceRef.current = openingBalance
+  }, [openingBalance])
+
+  useEffect(() => {
+    dailyOpeningBalancesRef.current = dailyOpeningBalances
+  }, [dailyOpeningBalances])
 
   // Enqueue an action to be synced when online
   const enqueueSyncItem = useCallback(
@@ -212,7 +234,9 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     try {
       const cachedTxs = localStorage.getItem(keys.txs)
       if (cachedTxs) {
-        setTransactions(JSON.parse(cachedTxs))
+        const parsed = JSON.parse(cachedTxs)
+        transactionsRef.current = parsed
+        setTransactions(parsed)
       }
 
       const cachedProjects = localStorage.getItem(keys.projects)
@@ -272,6 +296,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (isMounted && data?.transactions && Array.isArray(data.transactions)) {
+          transactionsRef.current = data.transactions
           setTransactions(data.transactions)
           try {
             localStorage.setItem(keys.txs, JSON.stringify(data.transactions))
@@ -416,21 +441,47 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       if (tx.type !== 'income') {
         const txDate = tx.date || TODAY
         const dateOpening = getOpeningBalanceForDate(txDate)
-        const summary = getFinancialSummary(
-          transactions.filter((t) => t.date === txDate),
+        const liveTxs = transactionsRef.current
+        const currentOpeningCash = openingCashRef.current
+
+        // 1. Financial summary for the transaction's date
+        const daySummary = getFinancialSummary(
+          liveTxs.filter((t) => t.date === txDate),
           dateOpening,
-          openingCash,
+          currentOpeningCash,
         )
 
-        if (tx.method === 'cash' && tx.amount > summary.currentCash) {
+        // 2. All-time cash accumulated across all dates
+        const allCashIn = liveTxs
+          .filter((t) => t.type === 'income' && t.method === 'cash')
+          .reduce((sum, t) => sum + t.amount, 0)
+        const allCashOut = liveTxs
+          .filter((t) => t.type !== 'income' && t.method === 'cash')
+          .reduce((sum, t) => sum + t.amount, 0)
+        const allTimeCash = Math.max(0, currentOpeningCash + allCashIn - allCashOut)
+
+        const availableCash = Math.max(daySummary.currentCash, allTimeCash)
+
+        // 3. All-time net balance
+        const allIncome = liveTxs
+          .filter((t) => t.type === 'income')
+          .reduce((sum, t) => sum + t.amount, 0)
+        const allExpense = liveTxs
+          .filter((t) => t.type !== 'income')
+          .reduce((sum, t) => sum + t.amount, 0)
+        const allTimeNet = Math.max(0, openingBalanceRef.current + allIncome - allExpense)
+
+        const availableNet = Math.max(daySummary.netBalance, allTimeNet)
+
+        if (tx.method === 'cash' && tx.amount > availableCash) {
           throw new Error(
-            `Cannot add expense of ₹${tx.amount.toLocaleString('en-IN')}. Available cash in hand is only ₹${summary.currentCash.toLocaleString('en-IN')}. Net cash balance cannot go below ₹0.`,
+            `Cannot add expense of ₹${tx.amount.toLocaleString('en-IN')}. Available cash in hand is only ₹${availableCash.toLocaleString('en-IN')}. Net cash balance cannot go below ₹0.`,
           )
         }
 
-        if (tx.amount > summary.netBalance) {
+        if (tx.amount > availableNet) {
           throw new Error(
-            `Cannot add expense of ₹${tx.amount.toLocaleString('en-IN')}. Available net balance is only ₹${summary.netBalance.toLocaleString('en-IN')}. Net balance cannot go below ₹0.`,
+            `Cannot add expense of ₹${tx.amount.toLocaleString('en-IN')}. Available net balance is only ₹${availableNet.toLocaleString('en-IN')}. Net balance cannot go below ₹0.`,
           )
         }
       }
@@ -452,6 +503,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       // 1. Immediate Local State & Storage update
       setTransactions((prev) => {
         const next = [created, ...prev]
+        transactionsRef.current = next
         if (typeof window !== 'undefined') {
           const keys = getCacheKeys(user?.id)
           try {
@@ -495,6 +547,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         if (data?.transaction?.id) {
           setTransactions((prev) => {
             const next = prev.map((item) => (item.id === tempId ? data.transaction : item))
+            transactionsRef.current = next
             if (typeof window !== 'undefined') {
               const keys = getCacheKeys(user?.id)
               try {
@@ -518,13 +571,14 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
       return created
     },
-    [user?.id, enqueueSyncItem],
+    [user?.id, enqueueSyncItem, getOpeningBalanceForDate],
   )
 
   const deleteTransaction = useCallback(
     (id: string) => {
       setTransactions((prev) => {
         const next = prev.filter((t) => t.id !== id)
+        transactionsRef.current = next
         if (typeof window !== 'undefined') {
           const keys = getCacheKeys(user?.id)
           try {
