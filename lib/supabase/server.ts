@@ -26,19 +26,22 @@ export const supabaseAuthClient = createClient(supabaseUrl, supabaseAnonKey, {
 export async function findUserByEmail(email: string) {
   if (!email) return null
   const target = email.trim().toLowerCase()
+  const PER_PAGE = 1000
+  const MAX_PAGES = 100 // hard stop: 100k users
 
   try {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({
-      page: 1,
-      perPage: 1000,
-    })
-
-    if (error || !data?.users) {
-      console.error('Error fetching users from Supabase admin:', error)
-      return null
+    // Walk every page: a single page of 1000 would hide existing users beyond the first 1000.
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: PER_PAGE })
+      if (error || !data?.users) {
+        console.error('Error fetching users from Supabase admin:', error)
+        return null
+      }
+      const hit = data.users.find((u) => u.email?.toLowerCase() === target)
+      if (hit) return hit
+      if (data.users.length < PER_PAGE) return null
     }
-
-    return data.users.find((u) => u.email?.toLowerCase() === target) || null
+    return null
   } catch (err) {
     console.error('Exception finding user in Supabase:', err)
     return null

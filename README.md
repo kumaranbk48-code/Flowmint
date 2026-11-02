@@ -50,7 +50,7 @@ Contractors can speak naturally in English, Tamil, or Hindi to record site expen
 * **Voice Ledger Entry (Multimodal Gemini AI)**: Speak naturally (e.g. *"Received 10,000 from Sharma Residence"* or *"Paid 4,500 for cement"*). Audio is processed through Google Gemini AI to extract transaction types, amounts, categories, and project mappings.
 * **Offline-First PWA**: Install FlowMint directly to your Android, iOS, or desktop home screen. Launch and use the app with 0ms delay even without internet; manual entries save locally and sync to the cloud automatically upon reconnection.
 * **Multi-Project Management**: Track contract values, client advance payments, material expenses, and pending balances independently across all active projects.
-* **Live Cash-in-Hand Counter**: Distinguish between bank/UPI transfers and physical cash in hand on site with opening balance overrides.
+* **Live Cash-in-Hand Counter**: Distinguish between bank/UPI transfers and physical cash in hand on site with a once-set opening balance and opening cash; every day opens with the previous day's closing balance.
 * **Reports & One-Click CSV Export**: Filter finances by date range (Today, 7 Days, 30 Days, Custom) or by project, and download professional CSV cashbook spreadsheets.
 * **Secure Authentication & Tenant Isolation**: Server-side HMAC-SHA256 session cookies, user enumeration protection, strict project ownership verification, and rate limiting.
 
@@ -130,7 +130,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-secret-key
 # Google Gemini AI Studio (Server-Side Only)
 GEMINI_API_KEY=your-gemini-api-key
 
-# Session Signing Secret (Optional: defaults to SUPABASE_SERVICE_ROLE_KEY)
+# Session Signing Secret (REQUIRED in production, at least 32 characters; there is no fallback)
 SESSION_SECRET=your-custom-random-32-char-secret-salt
 ```
 
@@ -228,7 +228,7 @@ flowmint/
 │   └── page.tsx               # Root Dashboard view
 ├── components/
 │   ├── auth/                  # Auth loading transition & official Google button
-│   ├── dashboard/             # Cashbook ledger, opening balance modal, manual entry
+│   ├── dashboard/             # Cashbook ledger, manual entry
 │   ├── projects/              # Projects list, metrics, and creation modals
 │   ├── pwa/                   # PWA service worker registration & offline status banner
 │   ├── reports/               # Date-range summary and CSV export
@@ -259,7 +259,9 @@ FlowMint enforces a zero-trust server architecture:
 * **Session Token Verification**: Cryptographic HMAC-SHA256 token verification on every request. Requests cannot forge `userId` parameters to access other contractors' data.
 * **Server-Side Project Ownership**: Transactions referencing a project ID are validated server-side to confirm the project belongs to the authenticated user before insertion.
 * **Gemini Key Protection**: The Gemini API key is accessed exclusively server-side via `x-goog-api-key` headers; it is never exposed to the client or browser network logs.
-* **Rate Limiting**: Sliding-window rate limiters defend AI voice endpoints (15–20 req/min/IP) and authentication routes (10 req/min/IP).
+* **Rate Limiting**: Sliding-window rate limiters defend AI voice endpoints (15–20 req/min/IP) and authentication routes (10 req/min/IP). They are in-memory (per server instance); use a shared store such as Upstash/Redis for a multi-instance production deployment.
+* **Database migrations**: apply `supabase/migrations/20261028_siteflow_ledger.sql`, then `20261101_flowmint_hardening.sql` (soft delete, audit trail, wage type, project-ownership foreign key, exact decimals, opening cash).
+* **Tests**: `npm test` runs the financial-logic, API, sync-queue and security tests.
 * **Financial Constraints**: Transaction amounts are validated server-side (`amount > 0 AND amount <= 1,000,000,000`) with strict uppercase/HTML sanitization.
 * **HTTP Security Headers**: Configured in `next.config.mjs` (`X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(self)`).
 

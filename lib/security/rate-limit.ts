@@ -77,15 +77,22 @@ export const voiceRateLimiter = new InMemoryRateLimiter(25, 60)
 export const apiRateLimiter = new InMemoryRateLimiter(120, 60)
 
 /**
- * Extracts a representative client IP from standard proxy headers.
+ * Client IP for rate limiting. Only headers a trusted edge sets itself are used; a bare
+ * X-Forwarded-For (which any client can send) is never trusted on its own.
+ *  - Vercel / Cloudflare / generic reverse proxy headers first
+ *  - then the LAST X-Forwarded-For entry (appended by the nearest proxy, not by the client)
  */
 export function getClientIp(req: Request): string {
+  const trusted =
+    req.headers.get('x-vercel-forwarded-for') ||
+    req.headers.get('cf-connecting-ip') ||
+    req.headers.get('x-real-ip')
+  if (trusted) return trusted.split(',')[0].trim()
+
   const forwarded = req.headers.get('x-forwarded-for')
   if (forwarded) {
-    return forwarded.split(',')[0].trim()
+    const hops = forwarded.split(',').map((h) => h.trim()).filter(Boolean)
+    if (hops.length > 0) return hops[hops.length - 1]
   }
-  const realIp = req.headers.get('x-real-ip')
-  if (realIp) return realIp.trim()
   return '127.0.0.1'
 }
-

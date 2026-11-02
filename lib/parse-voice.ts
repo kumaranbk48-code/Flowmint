@@ -1,4 +1,5 @@
 import type { PayMethod, Project, TxType } from './data'
+import { addDays, todayISO } from './format'
 
 export type ParsedEntry = {
   type: TxType
@@ -14,6 +15,10 @@ export type ParsedEntry = {
   requiresProject: boolean
   missingProject: boolean
   missingFields: ('type' | 'amount' | 'project' | 'method')[]
+  /** The speaker hedged ("around five thousand"). The amount is NOT guessed: it must be stated exactly. */
+  amountUncertain?: boolean
+  /** More than one project matched what was said; the user must choose. */
+  ambiguousProjectIds?: string[]
 }
 
 const NUM_WORDS: Record<string, number> = {
@@ -202,7 +207,12 @@ export function parseVoiceEntry(transcript: string, projects: Project[] = []): P
   }
 
   // 2. Parse Amount
-  const amount = parseSpokenAmount(transcript)
+  const heardAmount = parseSpokenAmount(transcript)
+  // "around 5000", "approximately", "maybe", "about": never silently turn an estimate into a recorded amount.
+  const amountUncertain =
+    heardAmount !== null &&
+    /\b(around|approx(?:imately)?|about|roughly|maybe|nearly|almost|somewhere|close to|or so|odd)\b/i.test(text)
+  const amount = amountUncertain ? null : heardAmount
 
   // 3. Intelligent Category & Scope Classification (Regular Daily vs Project Expenses)
   let category = 'Other'
@@ -269,40 +279,36 @@ export function parseVoiceEntry(transcript: string, projects: Project[] = []): P
     category = 'Tools'
   }
 
-  // 4. Match Project (Target project phrase "for [project]" takes priority)
-  let matchedProject: Project | null = null
+  // 4. Match Project. A project is only chosen when exactly ONE project fits what was said.
+  //    If several fit (three "Sharma ..." projects, or one client with several projects) nothing is chosen
+  //    and the user is asked, instead of silently booking money to the wrong project.
+  const unique = <T,>(list: T[]) => Array.from(new Set(list))
+  const dropContained = (hits: Project[]) =>
+    hits.filter((p) => !hits.some((o) => o.id !== p.id && o.name.toLowerCase().includes(p.name.toLowerCase()) && o.name.length > p.name.length))
 
-  // A. Check explicit project target phrase: "for Sharma Residence", "at ...", "from Sharma Residence"
-  for (const p of projects) {
-    const pName = p.name.toLowerCase()
-    if (
-      text.includes(`for ${pName}`) ||
-      text.includes(`at ${pName}`) ||
-      text.includes(`site ${pName}`) ||
-      text.includes(`from ${pName}`)
-    ) {
-      matchedProject = p
+  let matchedProject: Project | null = null
+  let ambiguousProjectIds: string[] = []
+
+  const tiers: Project[][] = [
+    // A. explicit target phrase: "for X", "at X", "site X", "from X"
+    projects.filter((p) => {
+      const n = p.name.toLowerCase()
+      return text.includes(`for ${n}`) || text.includes(`at ${n}`) || text.includes(`site ${n}`) || text.includes(`from ${n}`)
+    }),
+    // B. full project name anywhere
+    projects.filter((p) => text.includes(p.name.toLowerCase())),
+    // C. client name, only if explicitly spoken
+    projects.filter((p) => p.client.trim() !== '' && text.includes(p.client.toLowerCase())),
+  ]
+  for (const hits of tiers) {
+    const candidates = dropContained(unique(hits))
+    if (candidates.length === 1) {
+      matchedProject = candidates[0]
       break
     }
-  }
-
-  // B. Full project name match anywhere in transcript
-  if (!matchedProject) {
-    for (const p of projects) {
-      if (text.includes(p.name.toLowerCase())) {
-        matchedProject = p
-        break
-      }
-    }
-  }
-
-  // C. Client name match only if explicitly mentioned
-  if (!matchedProject) {
-    for (const p of projects) {
-      if (text.includes(p.client.toLowerCase())) {
-        matchedProject = p
-        break
-      }
+    if (candidates.length > 1) {
+      ambiguousProjectIds = candidates.map((p) => p.id)
+      break
     }
   }
 
@@ -318,17 +324,13 @@ export function parseVoiceEntry(transcript: string, projects: Project[] = []): P
     method = 'cheque'
   }
 
-  // 6. Detect Date
+  // 6. Detect Date (India time, never UTC). "day before yesterday" must be tested BEFORE "yesterday".
   let date: string | null = null
-  const now = new Date()
-  if (/\byesterday\b/i.test(text)) {
-    const yest = new Date(now)
-    yest.setDate(yest.getDate() - 1)
-    date = yest.toISOString().slice(0, 10)
-  } else if (/\bday before yesterday\b/i.test(text)) {
-    const dby = new Date(now)
-    dby.setDate(dby.getDate() - 2)
-    date = dby.toISOString().slice(0, 10)
+  const today = todayISO()
+  if (/\bday before yesterday\b/i.test(text)) {
+    date = addDays(today, -2)
+  } else if (/\byesterday\b/i.test(text)) {
+    date = addDays(today, -1)
   }
 
   // 7. Extract Spoken Party (Without hallucinating third parties from DB)
@@ -369,5 +371,7 @@ export function parseVoiceEntry(transcript: string, projects: Project[] = []): P
     requiresProject,
     missingProject,
     missingFields,
+    amountUncertain: amountUncertain || undefined,
+    ambiguousProjectIds: ambiguousProjectIds.length ? ambiguousProjectIds : undefined,
   }
 }

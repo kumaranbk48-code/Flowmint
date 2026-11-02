@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import { AlertTriangle, Check } from 'lucide-react'
 import { buttonClass, Segmented } from '@/components/ledger-ui'
-import { EXPENSE_CATEGORIES, TODAY, type PayMethod, type Project, type Transaction, type TxType } from '@/lib/data'
+import { EXPENSE_CATEGORIES, type PayMethod, type Project, type Transaction, type TxType } from '@/lib/data'
 import type { ParsedEntry } from '@/lib/parse-voice'
+import { todayISO } from '@/lib/format'
+import { parseMoneyInput } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
 const fieldClass =
@@ -30,22 +32,26 @@ export function ReviewForm({
   const [category, setCategory] = useState(parsed.category || (parsed.type === 'income' ? 'Client Payment' : 'Worker Payment'))
   const [party, setParty] = useState(parsed.party || (parsed.category === 'Worker Payment' ? 'Workers' : ''))
   const [method, setMethod] = useState<PayMethod>(parsed.method || (parsed.type === 'income' ? 'bank' : 'cash'))
-  const [date, setDate] = useState(TODAY)
+  const [date, setDate] = useState(() => todayISO())
+  // If the payment method was not spoken it is NOT assumed: the user must pick one before saving.
+  const [methodChosen, setMethodChosen] = useState(!!parsed.method)
   const [touched, setTouched] = useState(false)
 
-  const amountValue = parseFloat(amount.replace(/[^\d.]/g, '')) || 0
-  const amountMissing = !amountValue || isNaN(amountValue)
+  // Strict: text such as '100abc' is NOT read as 100; it counts as a missing amount.
+  const amountValue = parseMoneyInput(amount) ?? 0
+  const amountMissing = !amountValue
   const isDailyExpense = category === 'Fuel' || category === 'Food & tea' || category === 'Other'
 
   const warnings = [
     !amountValue && 'We couldn’t detect the amount. Please enter it below.',
+    !methodChosen && 'Choose how this was paid (cash, UPI, bank or cheque).',
     !projectId && !isDailyExpense && type === 'income' && 'Please select the building project for this income.',
   ].filter(Boolean) as string[]
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setTouched(true)
-    if (amountMissing) return
+    if (amountMissing || !methodChosen) return
 
     const selectedProj = projects.find((p) => p.id === projectId)
     const effectiveDescription =
@@ -204,7 +210,10 @@ export function ReviewForm({
           <Segmented
             label="Payment method"
             value={method}
-            onChange={(m) => setMethod(m as PayMethod)}
+            onChange={(m) => {
+              setMethod(m as PayMethod)
+              setMethodChosen(true)
+            }}
             options={[
               { value: 'cash', label: 'Cash' },
               { value: 'upi', label: 'UPI / GPay' },

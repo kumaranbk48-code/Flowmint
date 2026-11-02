@@ -3,16 +3,17 @@
 import { Suspense, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { ArrowLeft, CheckCircle2, Eye, EyeOff, Lock, Mail } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Eye, EyeOff, Lock } from 'lucide-react'
 import { buttonClass } from '@/components/ledger-ui'
 import { FlowMintLogo } from '@/components/logo'
 import { cn } from '@/lib/utils'
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams()
-  const initialEmail = searchParams.get('email') || ''
+  const queryTokenHash = searchParams.get('token_hash') || ''
 
-  const [email, setEmail] = useState(initialEmail)
+  // The recovery credential arrives from the emailed link: either ?token_hash=... or #access_token=...
+  const [credential, setCredential] = useState<{ tokenHash?: string; accessToken?: string } | null>(null)
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -22,17 +23,25 @@ function ResetPasswordForm() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (initialEmail) {
-      setEmail(initialEmail)
+    if (queryTokenHash) {
+      setCredential({ tokenHash: queryTokenHash })
+      return
     }
-  }, [initialEmail])
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const accessToken = hash.get('access_token')
+    if (accessToken && (hash.get('type') || 'recovery') === 'recovery') {
+      setCredential({ accessToken })
+      // Remove the token from the address bar / history as soon as it has been read.
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [queryTokenHash])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
-    if (!email.trim()) {
-      setError('Please enter your email address.')
+    if (!credential) {
+      setError('This reset link is missing or invalid. Please request a new one.')
       return
     }
 
@@ -41,8 +50,8 @@ function ResetPasswordForm() {
       return
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long.')
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters long.')
       return
     }
 
@@ -58,7 +67,7 @@ function ResetPasswordForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: email.trim(),
+          ...credential,
           password,
         }),
       })
@@ -117,29 +126,8 @@ function ResetPasswordForm() {
         ) : (
           <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
             <div>
-              <label htmlFor="reset-email" className="text-xs font-medium text-foreground">
-                Email address
-              </label>
-              <div className="relative mt-1">
-                <input
-                  id="reset-email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="contractor@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="h-11 w-full rounded-lg border border-input bg-card pl-3 pr-10 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
-                />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                  <Mail className="size-4" />
-                </span>
-              </div>
-            </div>
-
-            <div>
               <label htmlFor="new-password" className="text-xs font-medium text-foreground">
-                New password (min 6 characters)
+                New password (min 8 characters)
               </label>
               <div className="relative mt-1">
                 <input

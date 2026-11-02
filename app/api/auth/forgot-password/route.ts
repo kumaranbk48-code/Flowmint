@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
-import { findUserByEmail, supabaseAdmin, supabaseAuthClient } from '@/lib/supabase/server'
+import { supabaseAuthClient } from '@/lib/supabase/server'
 import { authRateLimiter, getClientIp } from '@/lib/security/rate-limit'
+
+/** Identical response whether or not the account exists (no user enumeration, no token in the response). */
+const GENERIC_MESSAGE = 'If an account exists for this email, a password reset link has been sent.'
 
 export async function POST(req: Request) {
   try {
@@ -13,79 +16,28 @@ export async function POST(req: Request) {
       )
     }
 
-    const body = await req.json()
-    const { email } = body
-
-    if (!email || typeof email !== 'string' || !email.trim()) {
-      return NextResponse.json({ error: 'Please enter your email address.' }, { status: 400 })
+    let email: unknown
+    try {
+      email = ((await req.json()) as { email?: unknown })?.email
+    } catch {
+      email = undefined
     }
-
-    const trimmedEmail = email.trim().toLowerCase()
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       return NextResponse.json({ error: 'Please enter a valid email address.' }, { status: 400 })
     }
 
-    // 1. Check if the user account exists in Supabase
-    const existingUser = await findUserByEmail(trimmedEmail)
-    if (!existingUser) {
-      return NextResponse.json(
-        { error: 'No account found with this email address. Please check your spelling or sign up.' },
-        { status: 404 },
-      )
-    }
-
-    // 2. Determine redirect destination
-    const host = req.headers.get('host') || 'localhost:3000'
-    const protocol = req.headers.get('x-forwarded-proto') || (host.startsWith('localhost') ? 'http' : 'https')
-    const origin = req.headers.get('origin') || `${protocol}://${host}`
-    const redirectUrl = `${origin}/reset-password?email=${encodeURIComponent(trimmedEmail)}`
-
-    // 3. Generate secure recovery link & token via admin client
-    let hashedToken = ''
-    let actionLink = ''
-    try {
-      const linkRes = await supabaseAdmin.auth.admin.generateLink({
-        type: 'recovery',
-        email: trimmedEmail,
-        options: {
-          redirectTo: redirectUrl,
-        },
-      })
-
-      if (linkRes.data?.properties) {
-        hashedToken = linkRes.data.properties.hashed_token || ''
-        actionLink = linkRes.data.properties.action_link || ''
-      }
-    } catch (e) {
-      console.warn('[Forgot Password] Supabase admin generateLink error:', e)
-    }
-
-    // 4. Trigger Supabase password reset email dispatch
-    try {
-      await supabaseAuthClient.auth.resetPasswordForEmail(trimmedEmail, {
-        redirectTo: redirectUrl,
-      })
-    } catch (e) {
-      console.warn('[Forgot Password] Supabase reset request error:', e)
-    }
-
-    const directResetUrl = `/reset-password?email=${encodeURIComponent(trimmedEmail)}${
-      hashedToken ? `&token=${encodeURIComponent(hashedToken)}` : ''
-    }`
-
-    return NextResponse.json({
-      success: true,
-      email: trimmedEmail,
-      message: `Password reset instructions have been generated for ${trimmedEmail}.`,
-      resetUrl: directResetUrl,
-      actionLink: actionLink || undefined,
-    })
-  } catch (err: unknown) {
-    console.error('Forgot password error:', err)
-    return NextResponse.json(
-      { error: 'An unexpected error occurred. Please try again later.' },
-      { status: 500 },
+    // The link is only ever delivered by email. The redirect target comes from server configuration,
+    // never from request headers (a forged Origin/Host header could otherwise point the emailed link at an attacker's site).
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, '')
+    const { error } = await supabaseAuthClient.auth.resetPasswordForEmail(
+      email.trim().toLowerCase(),
+      siteUrl ? { redirectTo: `${siteUrl}/reset-password` } : undefined,
     )
+    if (error) console.error('resetPasswordForEmail failed:', error.message)
+
+    return NextResponse.json({ success: true, message: GENERIC_MESSAGE })
+  } catch (err) {
+    console.error('forgot-password error:', err)
+    return NextResponse.json({ success: true, message: GENERIC_MESSAGE })
   }
 }
-

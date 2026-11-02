@@ -116,6 +116,13 @@ self.addEventListener('fetch', (event) => {
   )
 })
 
+// 3b. Logout: drop every cached page so nothing from the previous session stays on a shared device
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'CLEAR_CACHES') {
+    event.waitUntil(caches.keys().then((names) => Promise.all(names.map((n) => caches.delete(n)))))
+  }
+})
+
 // 4. Background Sync (PWABuilder requirement)
 self.addEventListener('sync', (event) => {
   if (event.tag === 'flowmint-sync-queue') {

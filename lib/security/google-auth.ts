@@ -10,7 +10,14 @@ export type VerifiedGoogleUser = {
   picture?: string
 }
 
-const EXPECTED_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+const expectedClientId = () => process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+
+/** In production the Google client id MUST be configured, otherwise every Google login is refused. */
+function audienceMatches(aud: unknown): boolean {
+  const expected = expectedClientId()
+  if (!expected) return process.env.NODE_ENV !== 'production'
+  return aud === expected
+}
 
 /**
  * Cryptographically verifies a Google ID token or OAuth access token.
@@ -33,8 +40,8 @@ export async function verifyGoogleToken(
 
       if (res.ok) {
         const data = await res.json()
-        // Validate aud matches our Google Client ID if configured
-        if (EXPECTED_CLIENT_ID && data.aud && data.aud !== EXPECTED_CLIENT_ID) {
+        // The token must have been issued for THIS app.
+        if (!audienceMatches(data.aud)) {
           console.warn('[Google Auth] Client ID mismatch in ID token:', data.aud)
           return null
         }
@@ -51,7 +58,19 @@ export async function verifyGoogleToken(
       }
     }
 
-    // 2. Fallback: Verify as Google OAuth2 access token via UserInfo API
+    // 2. Fallback: Verify as Google OAuth2 access token. Its audience is checked first, so a token
+    //    that Google issued to some other application cannot be used to log in here.
+    const infoRes = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(token)}`,
+      { method: 'GET', cache: 'no-store' },
+    )
+    if (!infoRes.ok) return null
+    const info = await infoRes.json()
+    if (!audienceMatches(info.aud) && !audienceMatches(info.azp)) {
+      console.warn('[Google Auth] Access token was issued to a different client:', info.aud)
+      return null
+    }
+
     const userinfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',

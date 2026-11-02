@@ -1,16 +1,24 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { Download, Mic, Search } from 'lucide-react'
 import { useLedger } from '@/components/ledger-provider'
 import { Amount, ButtonLink, buttonClass, PageHeader, Panel, Segmented, TransactionRow, TypeBadge } from '@/components/ledger-ui'
-import { TODAY, type TxType } from '@/lib/data'
+import { type Transaction, type TxType } from '@/lib/data'
+import { EditTransactionModal } from './edit-transaction-modal'
+import { todayISO } from '@/lib/format'
 import { formatDay, formatMoney, methodLabel, relativeDay } from '@/lib/format'
 import { groupByDate, summarise } from '@/lib/ledger'
 import { cn } from '@/lib/utils'
 
 export function TransactionsView({ initialProject }: { initialProject: string }) {
-  const { transactions, projects, isLoading } = useLedger()
+  const { transactions, projects, isLoading, deleteTransaction } = useLedger()
+  const [editing, setEditing] = useState<Transaction | null>(null)
+  const confirmDelete = (tx: Transaction) => {
+    if (window.confirm(`Delete this ${tx.type === 'income' ? 'income' : 'expense'} of ${formatMoney(tx.amount)}? Balances will be recalculated.`)) {
+      void deleteTransaction(tx.id)
+    }
+  }
   const [type, setType] = useState<'all' | TxType>('all')
   const [project, setProject] = useState(initialProject)
   const [query, setQuery] = useState('')
@@ -130,10 +138,16 @@ export function TransactionsView({ initialProject }: { initialProject: string })
           ) : null}
           {groups.map(([date, txs]) => (
             <div key={date}>
-              <p className="border-b bg-surface/60 px-4 py-1.5 text-xs font-medium text-muted-foreground">{relativeDay(date, TODAY)}</p>
+              <p className="border-b bg-surface/60 px-4 py-1.5 text-xs font-medium text-muted-foreground">{relativeDay(date, todayISO())}</p>
               <ul className="divide-y">
                 {txs.map((tx) => (
-                  <TransactionRow key={tx.id} tx={tx} project={tx.projectId ? projectMap.get(tx.projectId) : undefined} />
+                  <Fragment key={tx.id}>
+                    <TransactionRow tx={tx} project={tx.projectId ? projectMap.get(tx.projectId) : undefined} />
+                    <li className="flex gap-4 px-4 pb-2 text-xs font-semibold text-primary">
+                      <button type="button" onClick={() => setEditing(tx)}>Edit</button>
+                      <button type="button" onClick={() => confirmDelete(tx)} className="text-destructive">Delete</button>
+                    </li>
+                  </Fragment>
                 ))}
               </ul>
             </div>
@@ -163,6 +177,7 @@ export function TransactionsView({ initialProject }: { initialProject: string })
                   <th scope="col" className="px-3 py-2.5 font-medium">Type</th>
                   <th scope="col" className="px-3 py-2.5 font-medium">Method</th>
                   <th scope="col" className="px-5 py-2.5 text-right font-medium">Amount</th>
+                  <th scope="col" className="px-3 py-2.5 text-right font-medium"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -190,6 +205,10 @@ export function TransactionsView({ initialProject }: { initialProject: string })
                       <td className="whitespace-nowrap px-5 py-3 text-right">
                         <Amount tx={tx} />
                       </td>
+                      <td className="whitespace-nowrap px-3 py-3 text-right text-xs font-semibold">
+                        <button type="button" onClick={() => setEditing(tx)} className="mr-3 text-primary hover:underline">Edit</button>
+                        <button type="button" onClick={() => confirmDelete(tx)} className="text-destructive hover:underline">Delete</button>
+                      </td>
                     </tr>
                   )),
                 )}
@@ -198,6 +217,7 @@ export function TransactionsView({ initialProject }: { initialProject: string })
           )}
         </Panel>
       </div>
+      <EditTransactionModal tx={editing} onClose={() => setEditing(null)} />
     </>
   )
 }

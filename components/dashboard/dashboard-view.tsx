@@ -9,7 +9,6 @@ import {
   Download,
   FileSpreadsheet,
   Mic,
-  Pencil,
   Plus,
   RotateCcw,
   Wallet,
@@ -17,38 +16,37 @@ import {
 import { useLedger } from '@/components/ledger-provider'
 import { useAuth } from '@/components/auth-provider'
 import { ButtonLink, PageHeader, Panel, buttonClass } from '@/components/ledger-ui'
-import { TODAY, type Project } from '@/lib/data'
+import { type Project } from '@/lib/data'
+import { useToday } from '@/hooks/use-today'
 import { formatDay, formatLongDate, formatMoney, methodLabel } from '@/lib/format'
 import { computeRunningBalances, getFinancialSummary, type TransactionWithBalance } from '@/lib/ledger'
 import { cn } from '@/lib/utils'
 import { ManualEntryModal } from './manual-entry-modal'
-import { DailyOpeningBalanceModal } from './daily-opening-balance-modal'
 
 export function DashboardView() {
   const {
     transactions,
     projects,
-    openingBalance,
-    openingCash,
     getOpeningBalanceForDate,
-    setDailyOpeningBalance,
-    isCustomDailyBalance,
+    getOpeningCashForDate,
     isLoading,
   } = useLedger()
   const { business, user } = useAuth()
   const [isManualOpen, setIsManualOpen] = useState(false)
-  const [isDailyBalanceOpen, setIsDailyBalanceOpen] = useState(false)
 
-  const todayOpeningBalance = getOpeningBalanceForDate(TODAY)
-  const isCustomToday = isCustomDailyBalance(TODAY)
+  const today = useToday()
+  // Opening balance is set once; today's opening = yesterday's closing (opening balance + everything dated before today).
+  const todayOpeningBalance = getOpeningBalanceForDate(today)
+  const todayOpeningCash = getOpeningCashForDate(today)
+  const hasEarlierActivity = transactions.some((t) => t.date < today)
 
   const firstName = (business.ownerName || user?.name || '').trim().split(' ')[0]
   const greeting = firstName ? `Good morning, ${firstName}` : 'Good morning'
 
   // Filter today's transactions
   const todayRawTxs = useMemo(() => {
-    return transactions.filter((t) => t.date === TODAY)
-  }, [transactions])
+    return transactions.filter((t) => t.date === today)
+  }, [transactions, today])
 
   // Compute running balance starting from today's opening balance
   const todayTxsWithBalance = useMemo(() => {
@@ -60,8 +58,8 @@ export function DashboardView() {
 
   // Financial summary for today
   const summary = useMemo(() => {
-    return getFinancialSummary(todayRawTxs, todayOpeningBalance, openingCash)
-  }, [todayRawTxs, todayOpeningBalance, openingCash])
+    return getFinancialSummary(todayRawTxs, todayOpeningBalance, todayOpeningCash)
+  }, [todayRawTxs, todayOpeningBalance, todayOpeningCash])
 
   const projectMap = useMemo(() => {
     return new Map<string, Project>(projects.map((p) => [p.id, p]))
@@ -70,7 +68,7 @@ export function DashboardView() {
   return (
     <>
       <PageHeader
-        eyebrow={formatLongDate(TODAY)}
+        eyebrow={formatLongDate(today)}
         title={greeting}
         description="FlowMint Financial Ledger · Live cashbook and transaction tracking"
         actions={
@@ -111,60 +109,16 @@ export function DashboardView() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {/* Opening Balance */}
-            <div
-              className={cn(
-                'relative flex flex-col justify-between rounded-xl border p-4 shadow-xs transition-all',
-                isCustomToday
-                  ? 'border-amber-500/50 bg-amber-500/5 dark:bg-amber-500/10'
-                  : 'bg-card hover:border-primary/40',
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-muted-foreground">Opening Balance</span>
-                <button
-                  type="button"
-                  onClick={() => setIsDailyBalanceOpen(true)}
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold transition-all active:scale-95',
-                    isCustomToday
-                      ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20'
-                      : 'border-border/80 bg-secondary/60 text-foreground hover:border-primary hover:text-primary',
-                  )}
-                  title="Change opening balance for today"
-                >
-                  <Pencil className="size-2.5" />
-                  <span>{isCustomToday ? 'Custom' : 'Change'}</span>
-                </button>
-              </div>
-
+            {/* Opening Balance: carried forward from the previous day's closing balance */}
+            <div className="relative flex flex-col justify-between rounded-xl border bg-card p-4 shadow-xs transition-all hover:border-primary/40">
+              <span className="text-xs font-semibold text-muted-foreground">Opening Balance</span>
               <div>
                 <p className="num mt-2 text-xl font-bold tracking-tight text-foreground md:text-2xl">
                   {formatMoney(summary.openingBalance)}
                 </p>
-                <div className="mt-1 flex items-center justify-between text-[11px]">
-                  {isCustomToday ? (
-                    <span className="font-semibold text-amber-600 dark:text-amber-400">
-                      Custom for today
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">Day starting balance</span>
-                  )}
-                  {isCustomToday ? (
-                    <button
-                      type="button"
-                      onClick={() => setDailyOpeningBalance(TODAY, null)}
-                      className="font-semibold text-primary hover:underline text-[11px]"
-                      title={`Reset to default (${formatMoney(openingBalance)})`}
-                    >
-                      Reset
-                    </button>
-                  ) : (
-                    <span className="text-muted-foreground/60 text-[10px]">
-                      Default: {formatMoney(openingBalance)}
-                    </span>
-                  )}
-                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {hasEarlierActivity ? "Yesterday's closing balance" : 'Starting balance (set once in Settings)'}
+                </p>
               </div>
             </div>
 
@@ -376,7 +330,6 @@ export function DashboardView() {
             <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-surface/30 px-4 py-3 md:px-5">
               <p className="text-xs text-muted-foreground">
                 Showing all {todayTxsWithBalance.length} entries recorded today · Running balance calculated from opening {formatMoney(todayOpeningBalance)}
-                {isCustomToday ? ' (custom for today)' : ''}
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -398,7 +351,6 @@ export function DashboardView() {
       </div>
 
       <ManualEntryModal open={isManualOpen} onClose={() => setIsManualOpen(false)} />
-      <DailyOpeningBalanceModal open={isDailyBalanceOpen} onClose={() => setIsDailyBalanceOpen(false)} />
     </>
   )
 }

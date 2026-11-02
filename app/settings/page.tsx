@@ -7,6 +7,7 @@ import { useLedger } from '@/components/ledger-provider'
 import { useAuth } from '@/components/auth-provider'
 import { PageHeader, Panel, buttonClass } from '@/components/ledger-ui'
 import { formatMoney } from '@/lib/format'
+import { validateOpeningBalance } from '@/lib/security/validation'
 
 export default function SettingsPage() {
   const {
@@ -14,8 +15,6 @@ export default function SettingsPage() {
     setOpeningBalance,
     openingCash,
     setOpeningCash,
-    dailyOpeningBalances,
-    clearAllDailyBalances,
   } = useLedger()
   const { business, user } = useAuth()
 
@@ -38,16 +37,18 @@ export default function SettingsPage() {
   const handleSaveFinances = (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMessage('')
-    const parsedBalance = parseFloat(balanceInput.replace(/,/g, ''))
-    const parsedCash = parseFloat(cashInput.replace(/,/g, ''))
-
-    if (isNaN(parsedBalance) || parsedBalance < 0 || isNaN(parsedCash) || parsedCash < 0) {
-      setErrorMessage('Please enter valid positive numbers for balances.')
+    // Strict: '12,000', '100abc' etc. are rejected instead of being silently read as a different number.
+    const balanceCheck = validateOpeningBalance(balanceInput.trim())
+    const cashCheck = validateOpeningBalance(cashInput.trim())
+    if (!balanceCheck.valid || !cashCheck.valid || balanceCheck.balance < 0 || cashCheck.balance < 0) {
+      setErrorMessage('Please enter valid amounts (digits with at most 2 decimals, no commas or symbols).')
       return
     }
+    const parsedBalance = balanceCheck.balance
+    const parsedCash = cashCheck.balance
 
-    if (parsedBalance > 1_000_000_000 || parsedCash > 1_000_000_000) {
-      setErrorMessage('Balances cannot exceed ₹100,00,00,000.')
+    if (parsedCash > parsedBalance) {
+      setErrorMessage('Starting cash in hand cannot be more than the opening balance (cash is part of the balance).')
       return
     }
 
@@ -99,28 +100,14 @@ export default function SettingsPage() {
         >
           <form onSubmit={handleSaveFinances} className="flex flex-col gap-4">
             <p className="text-xs text-muted-foreground">
-              These baseline values apply automatically every day. If you ever need a different starting amount on any particular day, you can quickly adjust it for that day only directly from your Dashboard or Reports.
+              Set these once, when you start using FlowMint. Every day then opens with the previous day&apos;s closing balance
+              automatically. Changing them later re-states the balance of every day and every report, so only change them to correct a mistake.
             </p>
-
-            {Object.keys(dailyOpeningBalances).length > 0 && (
-              <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
-                <span className="text-amber-800 dark:text-amber-300 font-medium">
-                  {Object.keys(dailyOpeningBalances).length} date(s) currently have custom daily opening balance overrides.
-                </span>
-                <button
-                  type="button"
-                  onClick={clearAllDailyBalances}
-                  className="font-bold text-primary hover:underline"
-                >
-                  Clear all daily overrides
-                </button>
-              </div>
-            )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="opening-balance" className="block text-xs font-semibold text-foreground">
-                  Default Day Opening Balance (₹)
+                  Opening Balance (₹): total money you start with
                 </label>
                 <div className="relative mt-1.5">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
@@ -130,7 +117,7 @@ export default function SettingsPage() {
                     id="opening-balance"
                     type="number"
                     min="0"
-                    step="any"
+                    step="0.01"
                     value={balanceInput}
                     onChange={(e) => setBalanceInput(e.target.value)}
                     className="h-10 w-full rounded-lg border border-input bg-card pl-7 pr-3 text-sm font-semibold text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
@@ -143,7 +130,7 @@ export default function SettingsPage() {
 
               <div>
                 <label htmlFor="opening-cash" className="block text-xs font-semibold text-foreground">
-                  Starting Cash in Hand (₹)
+                  Starting Cash in Hand (₹): the part of it held as physical cash
                 </label>
                 <div className="relative mt-1.5">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
@@ -153,7 +140,7 @@ export default function SettingsPage() {
                     id="opening-cash"
                     type="number"
                     min="0"
-                    step="any"
+                    step="0.01"
                     value={cashInput}
                     onChange={(e) => setCashInput(e.target.value)}
                     className="h-10 w-full rounded-lg border border-input bg-card pl-7 pr-3 text-sm font-semibold text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"

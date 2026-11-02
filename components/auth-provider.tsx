@@ -413,18 +413,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 
   const logout = useCallback(() => {
+    // Entries that were saved offline and not synced yet would be lost on logout: say so first.
+    try {
+      if (user?.id) {
+        const raw = localStorage.getItem(`flowmint_pending_queue_${user.id}`)
+        const unsynced = raw ? (JSON.parse(raw) as unknown[]).length : 0
+        if (
+          unsynced > 0 &&
+          !window.confirm(
+            `${unsynced} saved ${unsynced === 1 ? 'entry has' : 'entries have'} not been synced yet. Logging out now will discard ${unsynced === 1 ? 'it' : 'them'}. Log out anyway?`,
+          )
+        ) {
+          return
+        }
+      }
+    } catch {}
+
     fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
     setUser(null)
     setBusiness(DEFAULT_BUSINESS)
     try {
-      sessionStorage.removeItem('flowmint_user')
-      localStorage.removeItem('flowmint_user')
-      localStorage.removeItem('flowmint_business')
-      localStorage.removeItem('sitebook_user')
-      localStorage.removeItem('sitebook_business')
+      sessionStorage.clear()
+      // Remove every FlowMint key (cached transactions, projects, settings, sync queue): nothing financial stays on the device.
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i)
+        if (key && (key.startsWith('flowmint_') || key.startsWith('sitebook_'))) localStorage.removeItem(key)
+      }
+      navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_CACHES' })
     } catch {}
     router.replace('/login')
-  }, [router])
+  }, [router, user])
 
   const value = useMemo(
     () => ({

@@ -25,8 +25,9 @@ import {
 import { useLedger } from '@/components/ledger-provider'
 import { Amount, buttonClass, PageHeader, Panel, TypeIcon } from '@/components/ledger-ui'
 import { useMediaRecorderVoice } from '@/hooks/use-media-recorder-voice'
-import { TODAY, type PayMethod, type Project, type Transaction, type TxType } from '@/lib/data'
-import { formatMoney, methodLabel, typeLabel } from '@/lib/format'
+import { type PayMethod, type Project, type Transaction, type TxType } from '@/lib/data'
+import { formatMoney, methodLabel, todayISO, typeLabel } from '@/lib/format'
+import { parseMoneyInput } from '@/lib/money'
 import { parseSpokenAmount, type ParsedEntry } from '@/lib/parse-voice'
 import { cn } from '@/lib/utils'
 import { ReviewForm } from './review-form'
@@ -149,7 +150,8 @@ export function VoiceView() {
                 ? 'Client'
                 : 'Daily expense'),
           method: raw.method || null,
-          date: TODAY,
+          // The spoken date ('yesterday') is kept; it used to be overwritten with today.
+          date: raw.date || todayISO(),
           description: raw.description || cleanText,
           isDailyExpense: !!raw.isDailyExpense,
           requiresProject: !!raw.requiresProject,
@@ -172,7 +174,7 @@ export function VoiceView() {
             category: 'Other',
             party: '',
             method: 'cash',
-            date: TODAY,
+            date: todayISO(),
             description: cleanText,
             isDailyExpense: false,
             requiresProject: false,
@@ -294,7 +296,7 @@ export function VoiceView() {
   const missingListening = missingMediaVoice.status === 'recording'
   const missingTranscribing = missingMediaVoice.status === 'transcribing'
   const todaysVoice: Transaction[] = transactions.filter(
-    (t: Transaction) => t.date === TODAY && t.source === 'voice',
+    (t: Transaction) => t.date === todayISO() && t.source === 'voice',
   )
 
   // Confirm and Save action
@@ -315,7 +317,7 @@ export function VoiceView() {
       const saved = await addTransaction({
         type: txData.type,
         amount: txData.amount,
-        date: txData.date || TODAY,
+        date: txData.date || todayISO(),
         projectId: txData.projectId,
         category: txData.category,
         party: txData.party,
@@ -769,8 +771,8 @@ export function VoiceView() {
                       onSubmit={(e) => {
                         e.preventDefault()
                         const input = (e.currentTarget.elements.namedItem('amountInput') as HTMLInputElement)
-                        const val = parseFloat(input?.value)
-                        if (val > 0) {
+                        const val = parseMoneyInput(input?.value ?? '')
+                        if (val !== null && val > 0) {
                           const updated: ParsedState = {
                             ...stage.parsed,
                             amount: val,
@@ -1160,7 +1162,7 @@ export function VoiceView() {
                             category: stage.parsed.category,
                             party: stage.parsed.party,
                             method: stage.parsed.method || 'cash',
-                            date: stage.parsed.date || TODAY,
+                            date: stage.parsed.date || todayISO(),
                             description: stage.parsed.description,
                           })
                         }

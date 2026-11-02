@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, Building2, CheckCircle2, Mic, Plus, Trash2, UserRound, X } from 'lucide-react'
 import { useLedger, type NewProjectInput } from '@/components/ledger-provider'
 import { ButtonLink, PageHeader, buttonClass } from '@/components/ledger-ui'
-import { TODAY, type Project } from '@/lib/data'
+import { type Project } from '@/lib/data'
+import { todayISO } from '@/lib/format'
 import { formatDay, formatMoney } from '@/lib/format'
 import { projectStats } from '@/lib/ledger'
 import { cn } from '@/lib/utils'
@@ -232,9 +233,13 @@ export function ProjectsView() {
         onConfirm={() => {
           if (projectToDelete) {
             const name = projectToDelete.name
-            deleteProject(projectToDelete.id)
+            const id = projectToDelete.id
             setProjectToDelete(null)
-            setFeedback({ type: 'success', message: `Project "${name}" was deleted.` })
+            deleteProject(id).then(
+              () => setFeedback({ type: 'success', message: `Project "${name}" was deleted.` }),
+              (err: unknown) =>
+                setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Could not delete the project.' }),
+            )
           }
         }}
       />
@@ -254,7 +259,7 @@ function AddProjectModal({
   const [name, setName] = useState('')
   const [client, setClient] = useState('')
   const [contractValue, setContractValue] = useState('')
-  const [startDate, setStartDate] = useState(TODAY)
+  const [startDate, setStartDate] = useState(() => todayISO())
   const [expectedCompletionDate, setExpectedCompletionDate] = useState('')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -307,7 +312,7 @@ function AddProjectModal({
       setName('')
       setClient('')
       setContractValue('')
-      setStartDate(TODAY)
+      setStartDate(todayISO())
       setExpectedCompletionDate('')
       onClose()
     } catch {

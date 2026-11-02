@@ -12,7 +12,6 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [message, setMessage] = useState('')
-  const [resetUrl, setResetUrl] = useState('')
   const [error, setError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,10 +37,7 @@ export default function ForgotPasswordPage() {
       }
 
       setSubmitted(true)
-      setMessage(data.message || 'Password reset instructions have been generated.')
-      if (data.resetUrl) {
-        setResetUrl(data.resetUrl)
-      }
+      setMessage(data.message || 'If an account exists for this email, a reset link has been sent.')
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'An error occurred. Please try again.'
       setError(msg)
@@ -76,16 +72,10 @@ export default function ForgotPasswordPage() {
               {message}
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
-              Instructions have been dispatched. You can also click below to set your new password directly:
+              Open the link in the email to choose a new password. The link works once and expires soon.
             </p>
 
             <div className="mt-5 flex w-full flex-col gap-2.5 sm:flex-row sm:justify-center">
-              <Link
-                href={resetUrl || `/reset-password?email=${encodeURIComponent(email)}`}
-                className={cn(buttonClass('primary'), 'w-full sm:w-auto inline-flex items-center justify-center gap-2')}
-              >
-                <span>Reset Password Now</span>
-              </Link>
               <Link
                 href="/login"
                 className={cn(buttonClass('outline'), 'w-full sm:w-auto inline-flex items-center justify-center gap-2')}

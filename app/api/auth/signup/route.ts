@@ -111,7 +111,6 @@ export async function POST(req: Request) {
       user: newUser,
       business: initialBusiness,
       onboardingCompleted: false,
-      token: sessionToken,
     })
 
     response.headers.set('Set-Cookie', createSessionCookie(sessionToken))

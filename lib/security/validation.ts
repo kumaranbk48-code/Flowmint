@@ -2,7 +2,7 @@
  * Input sanitization and validation helpers for FlowMint.
  */
 
-const ALLOWED_TX_TYPES = ['income', 'expense'] as const
+export const ALLOWED_TX_TYPES = ['income', 'expense', 'wage'] as const
 export type ValidTxType = (typeof ALLOWED_TX_TYPES)[number]
 
 const ALLOWED_PAY_METHODS = ['cash', 'upi', 'bank', 'cheque'] as const
@@ -24,73 +24,107 @@ export function sanitizeString(val: unknown, maxLen = 255): string {
     .slice(0, maxLen)
 }
 
-/**
- * Validates financial transaction amounts:
- * - Must be a finite number
- * - Must be strictly positive
- * - Must not exceed a sane ceiling (e.g. ₹100 Crores)
- */
-export function validateAmount(val: unknown): { valid: boolean; amount: number; error?: string } {
-  const num = typeof val === 'number' ? val : parseFloat(String(val))
-  if (isNaN(num) || !isFinite(num)) {
-    return { valid: false, amount: 0, error: 'Amount must be a valid number.' }
-  }
-  if (num <= 0) {
-    return { valid: false, amount: 0, error: 'Amount must be greater than zero.' }
-  }
-  if (num > 1_000_000_000) {
-    return { valid: false, amount: 0, error: 'Amount exceeds maximum allowable threshold.' }
-  }
-  return { valid: true, amount: Math.round(num * 100) / 100 }
-}
+export const MAX_AMOUNT = 1_000_000_000
+const MONEY_STRING = /^\d{1,10}(\.\d{1,2})?$/
+
+export type AmountResult = { valid: boolean; amount: number; error?: string }
 
 /**
- * Validates opening balances (can be 0 or positive).
+ * Strict money validation (server is authoritative):
+ * - a finite number, or a plain decimal string such as "100" / "100.50" (no commas, no units,
+ *   no exponent, no trailing text: "100abc", "12,000", "1e3" are all rejected)
+ * - at most 2 decimal places (no silent rounding), at least 0.01, at most MAX_AMOUNT
+ * - allowZero is only for fields like a contract value where 0 is meaningful
  */
+export function validateAmount(val: unknown, opts: { allowZero?: boolean } = {}): AmountResult {
+  let num: number
+  if (typeof val === 'number') {
+    num = val
+  } else if (typeof val === 'string') {
+    const trimmed = val.trim()
+    if (!MONEY_STRING.test(trimmed)) return { valid: false, amount: 0, error: 'Amount must be a plain number such as 1500 or 1500.50' }
+    num = Number(trimmed)
+  } else {
+    return { valid: false, amount: 0, error: 'Amount is required' }
+  }
+  if (!Number.isFinite(num)) return { valid: false, amount: 0, error: 'Amount must be a finite number' }
+  if (num < 0) return { valid: false, amount: 0, error: 'Amount cannot be negative' }
+  if (num === 0) {
+    return opts.allowZero ? { valid: true, amount: 0 } : { valid: false, amount: 0, error: 'Amount must be greater than zero' }
+  }
+  if (num > MAX_AMOUNT) return { valid: false, amount: 0, error: 'Amount is too large' }
+  const paise = Math.round(num * 100)
+  if (Math.abs(num * 100 - paise) > 1e-6) return { valid: false, amount: 0, error: 'Amount can have at most 2 decimal places' }
+  if (paise < 1) return { valid: false, amount: 0, error: 'Amount must be at least 0.01' }
+  return { valid: true, amount: paise / 100 }
+}
+
+/** Opening balance / opening cash: same strictness, zero and negatives allowed. */
 export function validateOpeningBalance(val: unknown): { valid: boolean; balance: number } {
-  const num = typeof val === 'number' ? val : parseFloat(String(val))
-  if (isNaN(num) || !isFinite(num)) {
-    return { valid: false, balance: 0 }
-  }
-  if (num < -100_000_000 || num > 1_000_000_000) {
-    return { valid: false, balance: 0 }
-  }
-  return { valid: true, balance: Math.round(num * 100) / 100 }
+  let num: number
+  if (typeof val === 'number') num = val
+  else if (typeof val === 'string' && /^-?\d{1,10}(\.\d{1,2})?$/.test(val.trim())) num = Number(val.trim())
+  else return { valid: false, balance: 0 }
+  if (!Number.isFinite(num) || Math.abs(num) > MAX_AMOUNT) return { valid: false, balance: 0 }
+  const paise = Math.round(num * 100)
+  if (Math.abs(num * 100 - paise) > 1e-6) return { valid: false, balance: 0 }
+  return { valid: true, balance: paise / 100 }
 }
 
-/**
- * Validates transaction type.
- */
 export function validateTxType(val: unknown): ValidTxType | null {
   if (typeof val !== 'string') return null
-  const lower = val.toLowerCase().trim()
-  if (lower === 'income' || lower === 'expense') {
-    return lower
-  }
-  return null
+  return (ALLOWED_TX_TYPES as readonly string[]).includes(val) ? (val as ValidTxType) : null
 }
 
-/**
- * Validates payment method.
- */
 export function validatePayMethod(val: unknown): ValidPayMethod | null {
   if (typeof val !== 'string') return null
-  const lower = val.toLowerCase().trim()
-  if (ALLOWED_PAY_METHODS.includes(lower as ValidPayMethod)) {
-    return lower as ValidPayMethod
-  }
-  return null
+  const normalised = val.trim().toLowerCase()
+  return (ALLOWED_PAY_METHODS as readonly string[]).includes(normalised) ? (normalised as ValidPayMethod) : null
+}
+
+export function validateSource(val: unknown): 'voice' | 'manual' | null {
+  return val === 'voice' || val === 'manual' ? val : null
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+export function validateUuid(val: unknown): string | null {
+  return typeof val === 'string' && UUID_RE.test(val) ? val.toLowerCase() : null
 }
 
 /**
- * Validates ISO date format YYYY-MM-DD.
+ * Strict calendar date YYYY-MM-DD: must be a real date (2026-02-30 is rejected) between
+ * 2000-01-01 and 2100-12-31.
  */
 export function validateIsoDate(val: unknown): string | null {
   if (typeof val !== 'string') return null
-  const trimmed = val.trim()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null
-  const d = new Date(trimmed)
-  return isNaN(d.getTime()) ? null : trimmed
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(val)
+  if (!m) return null
+  const y = Number(m[1])
+  const mo = Number(m[2])
+  const d = Number(m[3])
+  if (y < 2000 || y > 2100) return null
+  const dt = new Date(Date.UTC(y, mo - 1, d))
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null
+  return val
+}
+
+/** A transaction date must be a real date and not more than one day ahead of `today` (IST slack). */
+export function validateTxDate(val: unknown, today: string): string | null {
+  const iso = validateIsoDate(val)
+  if (!iso) return null
+  const limit = new Date(`${today}T00:00:00Z`)
+  limit.setUTCDate(limit.getUTCDate() + 1)
+  return iso <= limit.toISOString().slice(0, 10) ? iso : null
+}
+
+/** An ISO timestamp the client may supply as created_at: within the last 90 days, at most 5 minutes ahead. */
+export function validateCreatedAt(val: unknown, now: Date = new Date()): string | null {
+  if (typeof val !== 'string') return null
+  const t = Date.parse(val)
+  if (!Number.isFinite(t)) return null
+  if (t > now.getTime() + 5 * 60_000) return null
+  if (t < now.getTime() - 90 * 86_400_000) return null
+  return new Date(t).toISOString()
 }
 
 /**

@@ -15,17 +15,13 @@ import {
 } from 'lucide-react'
 import { useLedger } from '@/components/ledger-provider'
 import { buttonClass, Segmented } from '@/components/ledger-ui'
-import { EXPENSE_CATEGORIES, TODAY, type PayMethod, type Project, type TxType } from '@/lib/data'
-import { formatMoney } from '@/lib/format'
+import { EXPENSE_CATEGORIES, type PayMethod, type Project, type TxType } from '@/lib/data'
+import { formatMoney, timeLabelIST, todayISO } from '@/lib/format'
+import { parseMoneyInput } from '@/lib/money'
 import { cn } from '@/lib/utils'
 
 function getCurrentTimeStr() {
-  const now = new Date()
-  const hours = now.getHours()
-  const minutes = String(now.getMinutes()).padStart(2, '0')
-  const ampm = hours >= 12 ? 'PM' : 'AM'
-  const formattedHours = hours % 12 || 12
-  return `${formattedHours}:${minutes} ${ampm}`
+  return timeLabelIST()
 }
 
 export function ManualEntryModal({
@@ -50,7 +46,8 @@ export function ManualEntryModal({
   const [party, setParty] = useState('')
   const [projectId, setProjectId] = useState<string>('')
   const [category, setCategory] = useState<string>('Other')
-  const [method, setMethod] = useState<PayMethod>('cash')
+  // '' = the speaker did not say how it was paid: the user must choose (it is never silently assumed to be cash)
+  const [method, setMethod] = useState<PayMethod | ''>('cash')
   const [time, setTime] = useState(getCurrentTimeStr())
   const [error, setError] = useState('')
   const [isSaving, setIsSaving] = useState(false)
@@ -112,7 +109,7 @@ export function ManualEntryModal({
               ? 'Client'
               : 'Daily expense'),
       )
-      setMethod(raw.method || 'cash')
+      setMethod(raw.method || '')
       setDescription(raw.description || clean)
       setTime(getCurrentTimeStr())
       setMode('confirm')
@@ -129,9 +126,9 @@ export function ManualEntryModal({
     e.preventDefault()
     if (isSaving) return
 
-    const numericAmount = parseFloat(amount.replace(/,/g, ''))
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      setError('Please enter a valid amount (greater than ₹0).')
+    const numericAmount = parseMoneyInput(amount)
+    if (numericAmount === null || numericAmount <= 0) {
+      setError('Please enter a valid amount: digits only, up to 2 decimals, greater than ₹0.')
       return
     }
 
@@ -144,6 +141,11 @@ export function ManualEntryModal({
           ? `Worker payment${selectedProj ? ' for ' + selectedProj.name : ''}`
           : `${category}${party ? ' — ' + party : ''}`)
 
+    if (!method) {
+      setError('Choose how this was paid: cash, UPI, bank or cheque.')
+      return
+    }
+
     setIsSaving(true)
     setError('')
 
@@ -151,7 +153,7 @@ export function ManualEntryModal({
       await addTransaction({
         type,
         amount: numericAmount,
-        date: TODAY,
+        date: todayISO(),
         time: time.trim() || getCurrentTimeStr(),
         description: effectiveDesc,
         projectId: projectId || null,

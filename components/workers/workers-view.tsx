@@ -3,8 +3,8 @@
 import { Check, Phone, UserPlus } from 'lucide-react'
 import { useLedger } from '@/components/ledger-provider'
 import { buttonClass, PageHeader, Panel } from '@/components/ledger-ui'
-import { PAYDAY, WEEK_START, type Worker } from '@/lib/data'
-import { addDays, formatDay, formatMoney } from '@/lib/format'
+import { type Worker } from '@/lib/data'
+import { addDays, formatDay, formatMoney, weekStartISO } from '@/lib/format'
 import { daysWorked, paidThisWeek, workerDue, workerEarned } from '@/lib/ledger'
 import { cn } from '@/lib/utils'
 
@@ -46,7 +46,7 @@ export function WorkersView() {
     <>
       <PageHeader
         title="Workers"
-        description={`Week of ${formatDay(WEEK_START)} – ${formatDay(addDays(WEEK_START, 5))} · wages paid every Saturday`}
+        description={`Week of ${formatDay(weekStartISO())} – ${formatDay(addDays(weekStartISO(), 5))} · wages paid every Saturday`}
         actions={
           <button type="button" className={buttonClass('outline')}>
             <UserPlus aria-hidden="true" />
@@ -60,7 +60,7 @@ export function WorkersView() {
           <div className="flex flex-wrap gap-x-10 gap-y-3">
             <div>
               <p className="text-xs text-muted-foreground">
-                Payroll due · {formatDay(PAYDAY, { weekday: 'short', day: 'numeric', month: 'short' })}
+                Payroll due · {formatDay(addDays(weekStartISO(), 5), { weekday: 'short', day: 'numeric', month: 'short' })}
               </p>
               <p className="num mt-1 text-2xl font-semibold tracking-tight md:text-3xl">{formatMoney(due)}</p>
             </div>

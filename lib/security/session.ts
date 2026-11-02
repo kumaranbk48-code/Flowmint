@@ -8,11 +8,24 @@ export type SessionPayload = {
   iat: number
 }
 
-// Derive a server-side HMAC secret. Falls back safely if not explicitly configured.
-const SECRET =
-  process.env.SESSION_SECRET ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  'flowmint-internal-hmac-secret-key-salt-2026'
+/**
+ * Server-side HMAC secret. In production SESSION_SECRET (>= 32 chars) is REQUIRED: there is no
+ * fallback to the Supabase service-role key or a hard-coded string, because a guessable signing
+ * key lets anyone forge a session for any user. Outside production a development fallback is used.
+ * Resolved lazily so `next build` does not need the secret.
+ */
+function getSecret(): string | null {
+  const configured = process.env.SESSION_SECRET
+  if (configured && configured.length >= 32) return configured
+  if (process.env.NODE_ENV === 'production') return null
+  return configured || process.env.SUPABASE_SERVICE_ROLE_KEY || 'flowmint-dev-only-insecure-secret'
+}
+
+function requireSecret(): string {
+  const secret = getSecret()
+  if (!secret) throw new Error('SESSION_SECRET (at least 32 characters) must be set in production')
+  return secret
+}
 
 const COOKIE_NAME = 'flowmint_session'
 const DEFAULT_EXPIRY_SECONDS = 7 * 24 * 60 * 60 // 7 days
@@ -51,7 +64,7 @@ export function signSession(
 
   const payloadB64 = base64UrlEncode(JSON.stringify(payload))
   const signature = crypto
-    .createHmac('sha256', SECRET)
+    .createHmac('sha256', requireSecret())
     .update(payloadB64)
     .digest('base64url')
 
@@ -67,8 +80,10 @@ export function verifySession(token: string): SessionPayload | null {
   if (parts.length !== 2) return null
 
   const [payloadB64, signature] = parts
+  const secret = getSecret()
+  if (!secret) return null // misconfigured production server: reject every session rather than accept forged ones
   const expectedSig = crypto
-    .createHmac('sha256', SECRET)
+    .createHmac('sha256', secret)
     .update(payloadB64)
     .digest('base64url')
 

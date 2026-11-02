@@ -12,14 +12,14 @@ import {
   ChevronRight,
   Download,
   Filter,
-  Pencil,
   X,
 } from 'lucide-react'
 import { useLedger } from '@/components/ledger-provider'
 import { useAuth } from '@/components/auth-provider'
-import { DailyOpeningBalanceModal } from '@/components/dashboard/daily-opening-balance-modal'
+import { useToday } from '@/hooks/use-today'
+import { csvCell } from '@/lib/money'
 import { buttonClass, PageHeader, Panel } from '@/components/ledger-ui'
-import { TODAY, type Project, type Transaction } from '@/lib/data'
+import { type Project, type Transaction } from '@/lib/data'
 import { addDays, formatDay, formatLongDate, formatMoney, methodLabel, parseDate, toISO } from '@/lib/format'
 import { computeRunningBalances, getFinancialSummary, type TransactionWithBalance } from '@/lib/ledger'
 import { cn } from '@/lib/utils'
@@ -49,7 +49,7 @@ function getMonthEnd(dateStr: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 }
 
-function formatDateRangeLabel(start: string, end: string, mode: DateMode): string {
+function formatDateRangeLabel(start: string, end: string, mode: DateMode, today: string): string {
   if (start === '2000-01-01' && end === '2099-12-31') {
     return 'All Recorded Transactions'
   }
@@ -63,14 +63,14 @@ function formatDateRangeLabel(start: string, end: string, mode: DateMode): strin
   const s2 = d2.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
   if (mode === 'day' || start === end) {
-    const isToday = start === TODAY
-    const isYesterday = start === addDays(TODAY, -1)
+    const isToday = start === today
+    const isYesterday = start === addDays(today, -1)
     const suffix = isToday ? ' (Today)' : isYesterday ? ' (Yesterday)' : ''
     return `${s1}, ${year}${suffix}`
   }
 
   if (mode === 'weekly') {
-    const thisWeekStart = getSunday(TODAY)
+    const thisWeekStart = getSunday(today)
     const isThisWeek = start === thisWeekStart
     const isLastWeek = start === addDays(thisWeekStart, -7)
     const suffix = isThisWeek ? ' (This Week)' : isLastWeek ? ' (Last Week)' : ''
@@ -78,7 +78,7 @@ function formatDateRangeLabel(start: string, end: string, mode: DateMode): strin
   }
 
   if (mode === 'monthly') {
-    const isThisMonth = start.slice(0, 7) === TODAY.slice(0, 7)
+    const isThisMonth = start.slice(0, 7) === today.slice(0, 7)
     const suffix = isThisMonth ? ' (This Month)' : ''
     return `${s1} – ${s2}, ${year}${suffix}`
   }
@@ -90,18 +90,16 @@ export function ReportsView() {
   const {
     transactions,
     projects,
-    openingBalance,
-    openingCash,
     getOpeningBalanceForDate,
-    isCustomDailyBalance,
+    getOpeningCashForDate,
   } = useLedger()
   const { business, user } = useAuth()
-  const [isDailyBalanceOpen, setIsDailyBalanceOpen] = useState(false)
+  const today = useToday()
 
   // Date mode & range state (defaults to Sunday-Saturday current week matching reference)
   const [dateMode, setDateMode] = useState<DateMode>('weekly')
-  const [startDate, setStartDate] = useState<string>(() => getSunday(TODAY))
-  const [endDate, setEndDate] = useState<string>(() => getSaturday(TODAY))
+  const [startDate, setStartDate] = useState<string>(() => getSunday(today))
+  const [endDate, setEndDate] = useState<string>(() => getSaturday(today))
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [projectFilter, setProjectFilter] = useState<string>('all')
 
@@ -173,14 +171,14 @@ export function ReportsView() {
     setDateMode(mode)
     setIsDropdownOpen(false)
     if (mode === 'day') {
-      setStartDate(TODAY)
-      setEndDate(TODAY)
+      setStartDate(today)
+      setEndDate(today)
     } else if (mode === 'weekly') {
-      setStartDate(getSunday(TODAY))
-      setEndDate(getSaturday(TODAY))
+      setStartDate(getSunday(today))
+      setEndDate(getSaturday(today))
     } else if (mode === 'monthly') {
-      setStartDate(getMonthStart(TODAY))
-      setEndDate(getMonthEnd(TODAY))
+      setStartDate(getMonthStart(today))
+      setEndDate(getMonthEnd(today))
     }
   }
 
@@ -190,29 +188,29 @@ export function ReportsView() {
   ) => {
     if (preset === 'today') {
       setDateMode('day')
-      setStartDate(TODAY)
-      setEndDate(TODAY)
+      setStartDate(today)
+      setEndDate(today)
     } else if (preset === 'yesterday') {
       setDateMode('day')
-      const yesterday = addDays(TODAY, -1)
+      const yesterday = addDays(today, -1)
       setStartDate(yesterday)
       setEndDate(yesterday)
     } else if (preset === 'this_week') {
       setDateMode('weekly')
-      setStartDate(getSunday(TODAY))
-      setEndDate(getSaturday(TODAY))
+      setStartDate(getSunday(today))
+      setEndDate(getSaturday(today))
     } else if (preset === 'last_week') {
       setDateMode('weekly')
-      const thisSunday = getSunday(TODAY)
+      const thisSunday = getSunday(today)
       setStartDate(addDays(thisSunday, -7))
       setEndDate(addDays(thisSunday, -1))
     } else if (preset === 'this_month') {
       setDateMode('monthly')
-      setStartDate(getMonthStart(TODAY))
-      setEndDate(getMonthEnd(TODAY))
+      setStartDate(getMonthStart(today))
+      setEndDate(getMonthEnd(today))
     } else if (preset === 'last_month') {
       setDateMode('monthly')
-      const d = parseDate(TODAY)
+      const d = parseDate(today)
       d.setMonth(d.getMonth() - 1)
       setStartDate(getMonthStart(toISO(d)))
       setEndDate(getMonthEnd(toISO(d)))
@@ -240,9 +238,15 @@ export function ReportsView() {
     })
   }, [transactions, startDate, endDate, projectFilter])
 
+  // Opening for the first day of the range = opening balance + every credit - debit dated BEFORE the range
+  // (carry-forward). A single-project view starts from 0 and counts only that project's earlier entries.
   const effectiveOpeningBalance = useMemo(() => {
-    return getOpeningBalanceForDate(startDate)
-  }, [getOpeningBalanceForDate, startDate])
+    return getOpeningBalanceForDate(startDate, projectFilter)
+  }, [getOpeningBalanceForDate, startDate, projectFilter])
+
+  const effectiveOpeningCash = useMemo(() => {
+    return getOpeningCashForDate(startDate, projectFilter)
+  }, [getOpeningCashForDate, startDate, projectFilter])
 
   // Compute running balance in chronological order
   const txsWithBalance = useMemo(() => {
@@ -251,10 +255,10 @@ export function ReportsView() {
 
   // Financial summary
   const summary = useMemo(() => {
-    return getFinancialSummary(filteredTxs, effectiveOpeningBalance, openingCash)
-  }, [filteredTxs, effectiveOpeningBalance, openingCash])
+    return getFinancialSummary(filteredTxs, effectiveOpeningBalance, effectiveOpeningCash)
+  }, [filteredTxs, effectiveOpeningBalance, effectiveOpeningCash])
 
-  const dateRangeLabel = formatDateRangeLabel(startDate, endDate, dateMode)
+  const dateRangeLabel = formatDateRangeLabel(startDate, endDate, dateMode, today)
 
   // Download CSV function
   const handleDownloadCsv = () => {
@@ -270,32 +274,37 @@ export function ReportsView() {
       'Running Balance (INR)',
     ]
 
+    // Every text cell goes through csvCell: quotes are escaped and cells starting with = + - @ are neutralised
+    // so a description can never run as a spreadsheet formula.
     const rows = txsWithBalance.map((t) => [
       t.date,
-      t.time || '',
-      `"${(t.description || t.party || t.category).replace(/"/g, '""')}"`,
-      `"${(t.projectId ? projectMap.get(t.projectId)?.name || 'General' : 'General').replace(/"/g, '""')}"`,
-      `"${t.category.replace(/"/g, '""')}"`,
-      `"${(methodLabel[t.method] || t.method).replace(/"/g, '""')}"`,
-      t.type !== 'income' ? t.amount : '',
-      t.type === 'income' ? t.amount : '',
-      t.balanceAfter,
+      csvCell(t.time || ''),
+      csvCell(t.description || t.party || t.category),
+      csvCell(t.projectId ? projectMap.get(t.projectId)?.name || 'General' : 'General'),
+      csvCell(t.category),
+      csvCell(methodLabel[t.method] || t.method),
+      t.type !== 'income' ? t.amount.toFixed(2) : '',
+      t.type === 'income' ? t.amount.toFixed(2) : '',
+      t.balanceAfter.toFixed(2),
     ])
 
+    const generatedAt = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', hour12: true })
     const csvContent = [
       `FlowMint Financial Ledger Statement`,
-      `Contractor: ${contractorName}`,
-      `Period: ${dateRangeLabel}`,
-      `Generated Date: ${TODAY}`,
-      `Opening Balance: ${openingBalance}`,
-      `Total Credit: ${summary.creditReceived}`,
-      `Total Debit: ${summary.debitSpent}`,
-      `Net Balance: ${summary.netBalance}`,
+      `Contractor,${csvCell(contractorName)}`,
+      `Period,${csvCell(dateRangeLabel)}`,
+      `Generated,${csvCell(`${generatedAt} IST`)}`,
+      `Opening Balance,${summary.openingBalance.toFixed(2)}`,
+      `Total Credit,${summary.creditReceived.toFixed(2)}`,
+      `Total Debit,${summary.debitSpent.toFixed(2)}`,
+      `Net Balance,${summary.netBalance.toFixed(2)}`,
+      `Entries,${txsWithBalance.length}`,
       '',
       headers.join(','),
       ...rows.map((r) => r.join(',')),
       '',
-      `Totals,,,,"Summary",,${summary.debitSpent},${summary.creditReceived},${summary.netBalance}`,
+      // Same 9 columns as the table: label, then totals under Debit / Credit / Running Balance.
+      `${csvCell('Totals')},,,,,,${summary.debitSpent.toFixed(2)},${summary.creditReceived.toFixed(2)},${summary.netBalance.toFixed(2)}`,
     ].join('\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -398,7 +407,7 @@ export function ReportsView() {
                       className="flex items-center justify-between rounded-lg px-2.5 py-2 text-left font-medium hover:bg-secondary transition-colors"
                     >
                       <span>Today</span>
-                      <span className="text-[11px] text-muted-foreground">{formatDay(TODAY)}</span>
+                      <span className="text-[11px] text-muted-foreground">{formatDay(today)}</span>
                     </button>
                     <button
                       type="button"
@@ -406,7 +415,7 @@ export function ReportsView() {
                       className="flex items-center justify-between rounded-lg px-2.5 py-2 text-left font-medium hover:bg-secondary transition-colors"
                     >
                       <span>Yesterday</span>
-                      <span className="text-[11px] text-muted-foreground">{formatDay(addDays(TODAY, -1))}</span>
+                      <span className="text-[11px] text-muted-foreground">{formatDay(addDays(today, -1))}</span>
                     </button>
                     <button
                       type="button"
@@ -415,7 +424,7 @@ export function ReportsView() {
                     >
                       <span>This Week</span>
                       <span className="text-[11px] text-muted-foreground">
-                        {formatDay(getSunday(TODAY))} – {formatDay(getSaturday(TODAY))}
+                        {formatDay(getSunday(today))} – {formatDay(getSaturday(today))}
                       </span>
                     </button>
                     <button
@@ -425,7 +434,7 @@ export function ReportsView() {
                     >
                       <span>Last Week</span>
                       <span className="text-[11px] text-muted-foreground">
-                        {formatDay(addDays(getSunday(TODAY), -7))} – {formatDay(addDays(getSunday(TODAY), -1))}
+                        {formatDay(addDays(getSunday(today), -7))} – {formatDay(addDays(getSunday(today), -1))}
                       </span>
                     </button>
                     <button
@@ -435,7 +444,7 @@ export function ReportsView() {
                     >
                       <span>This Month</span>
                       <span className="text-[11px] text-muted-foreground">
-                        {formatDay(getMonthStart(TODAY))} – {formatDay(getMonthEnd(TODAY))}
+                        {formatDay(getMonthStart(today))} – {formatDay(getMonthEnd(today))}
                       </span>
                     </button>
                     <button
@@ -478,7 +487,7 @@ export function ReportsView() {
                           <label className="text-[10px] text-muted-foreground">From</label>
                           <input
                             type="date"
-                            value={startDate === '2000-01-01' ? TODAY : startDate}
+                            value={startDate === '2000-01-01' ? today : startDate}
                             onChange={(e) => {
                               setDateMode('custom')
                               setStartDate(e.target.value)
@@ -490,7 +499,7 @@ export function ReportsView() {
                           <label className="text-[10px] text-muted-foreground">To</label>
                           <input
                             type="date"
-                            value={endDate === '2099-12-31' ? TODAY : endDate}
+                            value={endDate === '2099-12-31' ? today : endDate}
                             onChange={(e) => {
                               setDateMode('custom')
                               setEndDate(e.target.value)
@@ -588,7 +597,7 @@ export function ReportsView() {
               <span className="text-muted-foreground">From:</span>
               <input
                 type="date"
-                value={startDate === '2000-01-01' ? TODAY : startDate}
+                value={startDate === '2000-01-01' ? today : startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="h-8 rounded-lg border border-input bg-card px-2 text-xs font-medium outline-none"
               />
@@ -597,7 +606,7 @@ export function ReportsView() {
               <span className="text-muted-foreground">To:</span>
               <input
                 type="date"
-                value={endDate === '2099-12-31' ? TODAY : endDate}
+                value={endDate === '2099-12-31' ? today : endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 className="h-8 rounded-lg border border-input bg-card px-2 text-xs font-medium outline-none"
               />
@@ -628,7 +637,7 @@ export function ReportsView() {
                 <p className="text-sm font-bold text-foreground">
                   {dateRangeLabel}
                 </p>
-                <p className="text-[11px] text-muted-foreground">Generated on {formatLongDate(TODAY)}</p>
+                <p className="text-[11px] text-muted-foreground">Generated on {formatLongDate(today)}</p>
               </div>
             </div>
 
@@ -637,26 +646,10 @@ export function ReportsView() {
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-medium text-muted-foreground">Opening Balance</span>
-                  {dateMode === 'day' && (
-                    <button
-                      type="button"
-                      onClick={() => setIsDailyBalanceOpen(true)}
-                      className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-primary hover:underline"
-                      title="Adjust opening balance for this date"
-                    >
-                      <Pencil className="size-2.5" />
-                      <span>{isCustomDailyBalance(startDate) ? 'Custom' : 'Change'}</span>
-                    </button>
-                  )}
                 </div>
                 <p className="num mt-1 text-base font-bold text-foreground md:text-lg">
                   {formatMoney(summary.openingBalance)}
                 </p>
-                {dateMode === 'day' && isCustomDailyBalance(startDate) && (
-                  <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
-                    Custom for this day
-                  </p>
-                )}
               </div>
 
               <div>
@@ -700,7 +693,7 @@ export function ReportsView() {
               <tbody className="divide-y font-normal">
                 {/* Initial opening balance row */}
                 <tr className="bg-surface/30 font-semibold text-muted-foreground">
-                  <td className="px-3 py-2.5 tabular-nums">{formatDay(startDate === '2000-01-01' ? TODAY : startDate)}</td>
+                  <td className="px-3 py-2.5 tabular-nums">{formatDay(startDate === '2000-01-01' ? today : startDate)}</td>
                   <td className="px-3 py-2.5 font-bold text-foreground" colSpan={4}>
                     Opening Balance Forward
                   </td>
@@ -820,11 +813,6 @@ export function ReportsView() {
         </div>
       </div>
 
-      <DailyOpeningBalanceModal
-        open={isDailyBalanceOpen}
-        onClose={() => setIsDailyBalanceOpen(false)}
-        date={startDate}
-      />
     </>
   )
 }

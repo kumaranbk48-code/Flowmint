@@ -1,5 +1,3 @@
-import { addDays, toISO } from './format'
-
 export type TxType = 'income' | 'expense' | 'wage'
 export type PayMethod = 'cash' | 'upi' | 'bank' | 'cheque'
 
@@ -12,6 +10,9 @@ export type Transaction = {
   description?: string
   projectId: string | null
   workerId?: string | null
+  /** Server timestamps (ISO). Used as the final tie-break when ordering a ledger. */
+  createdAt?: string
+  updatedAt?: string
   category: string
   party: string
   note?: string
@@ -45,11 +46,6 @@ export type Worker = {
   attendance: (boolean | null)[]
   advance: number
 }
-
-/** Local dynamic date for today */
-export const TODAY = toISO(new Date())
-export const WEEK_START = addDays(TODAY, -((new Date().getDay() + 6) % 7))
-export const PAYDAY = addDays(WEEK_START, 5)
 
 export const DEFAULT_OPENING_BALANCE = 1000
 export const DEFAULT_OPENING_CASH = 1000
