@@ -37,6 +37,7 @@ declare global {
             },
           ) => void
           prompt: (notification?: (notification: unknown) => void) => void
+          cancel?: () => void
         }
         oauth2: {
           initTokenClient: (config: {
@@ -279,6 +280,14 @@ export function OfficialGoogleButton({
       })
     } catch (err) {
       console.error('Error initializing Google Sign-In:', err)
+    }
+
+    return () => {
+      try {
+        window.google?.accounts?.id?.cancel?.()
+      } catch {
+        /* ignore */
+      }
     }
   }, [scriptLoaded, mode, handleCredential, fetchUserInfo, onError])
 

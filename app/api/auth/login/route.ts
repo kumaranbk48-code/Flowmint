@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { ensureProfileExists, findUserByEmail, supabaseAuthClient } from '@/lib/supabase/server'
+import { ensureProfileExists, supabaseAuthClient } from '@/lib/supabase/server'
 import { authRateLimiter, getClientIp } from '@/lib/security/rate-limit'
 import { createSessionCookie, signSession } from '@/lib/security/session'
 
@@ -15,8 +15,14 @@ export async function POST(req: Request) {
       )
     }
 
-    const body = await req.json()
-    const { email, password } = body
+    let body: any
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 })
+    }
+
+    const { email, password } = body || {}
 
     if (!email || typeof email !== 'string' || !email.trim()) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 400 })
@@ -28,16 +34,7 @@ export async function POST(req: Request) {
 
     const trimmedEmail = email.trim().toLowerCase()
 
-    // 1. Check if user exists in Supabase
-    const existingUser = await findUserByEmail(trimmedEmail)
-    if (!existingUser) {
-      return NextResponse.json(
-        { error: 'Invalid email or password. Please check your credentials or sign up.' },
-        { status: 401 },
-      )
-    }
-
-    // 2. Validate password via Supabase Auth
+    // 1. Validate credentials via Supabase Auth directly (fast & unconstrained by user pagination)
     const { data: authData, error: authError } = await supabaseAuthClient.auth.signInWithPassword({
       email: trimmedEmail,
       password,
@@ -50,9 +47,11 @@ export async function POST(req: Request) {
       )
     }
 
-    // 3. Extract profile and ensure record in public.profiles table
-    const meta = existingUser.user_metadata || {}
-    const profile = await ensureProfileExists(existingUser.id, {
+    const authUser = authData.user
+
+    // 2. Extract profile and ensure record in public.profiles table
+    const meta = authUser.user_metadata || {}
+    const profile = await ensureProfileExists(authUser.id, {
       businessName: meta.businessName,
       ownerName: meta.ownerName || meta.name,
       businessType: meta.businessType,
@@ -61,9 +60,9 @@ export async function POST(req: Request) {
     })
 
     const user = {
-      id: existingUser.id,
+      id: authUser.id,
       name: profile?.owner_name || meta.name || trimmedEmail.split('@')[0],
-      email: existingUser.email || trimmedEmail,
+      email: authUser.email || trimmedEmail,
       isGoogle: !!meta.isGoogle,
     }
 

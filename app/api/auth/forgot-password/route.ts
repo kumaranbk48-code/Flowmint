@@ -28,7 +28,9 @@ export async function POST(req: Request) {
 
     // The link is only ever delivered by email. The redirect target comes from server configuration,
     // never from request headers (a forged Origin/Host header could otherwise point the emailed link at an attacker's site).
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, '')
+    const siteUrl =
+      process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, '') ||
+      (process.env.NODE_ENV !== 'production' ? 'http://localhost:3000' : undefined)
     const { error } = await supabaseAuthClient.auth.resetPasswordForEmail(
       email.trim().toLowerCase(),
       siteUrl ? { redirectTo: `${siteUrl}/reset-password` } : undefined,

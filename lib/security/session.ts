@@ -17,8 +17,15 @@ export type SessionPayload = {
 function getSecret(): string | null {
   const configured = process.env.SESSION_SECRET
   if (configured && configured.length >= 32) return configured
+  const sRole = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (sRole && sRole.length >= 32) {
+    if (process.env.NODE_ENV === 'production' && !configured) {
+      console.warn('[SESSION] SESSION_SECRET is not explicitly set; falling back to SUPABASE_SERVICE_ROLE_KEY for HMAC signing. Please configure SESSION_SECRET (>= 32 chars) in production.')
+    }
+    return sRole
+  }
   if (process.env.NODE_ENV === 'production') return null
-  return configured || process.env.SUPABASE_SERVICE_ROLE_KEY || 'flowmint-dev-only-insecure-secret'
+  return configured || 'flowmint-dev-only-insecure-secret'
 }
 
 function requireSecret(): string {

@@ -17,8 +17,14 @@ export async function POST(req: Request) {
       )
     }
 
-    const body = await req.json()
-    const { email, name, googleId, picture, credential, idToken, accessToken } = body
+    let body: any
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 })
+    }
+
+    const { email, name, googleId, picture, credential, idToken, accessToken } = body || {}
 
     const tokenToVerify = credential || idToken || accessToken
 

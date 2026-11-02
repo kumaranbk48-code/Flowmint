@@ -16,8 +16,14 @@ export async function POST(req: Request) {
       )
     }
 
-    const body = await req.json()
-    const { name, email, password } = body
+    let body: any
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON request body' }, { status: 400 })
+    }
+
+    const { name, email, password } = body || {}
 
     if (!name || typeof name !== 'string' || !name.trim()) {
       return NextResponse.json({ error: 'Please enter your full name.' }, { status: 400 })
@@ -71,9 +77,16 @@ export async function POST(req: Request) {
 
     if (error || !data.user) {
       console.error('Supabase create user error:', error)
+      const msg = error?.message || ''
+      if (msg.toLowerCase().includes('already') || (error as any)?.code === 'email_exists') {
+        return NextResponse.json(
+          { error: 'An account with this email already exists. Please log in instead.' },
+          { status: 409 },
+        )
+      }
       return NextResponse.json(
-        { error: error?.message || 'Failed to create your account in Supabase. Please try again.' },
-        { status: 500 },
+        { error: msg || 'Failed to create your account in Supabase. Please try again.' },
+        { status: 400 },
       )
     }
 
