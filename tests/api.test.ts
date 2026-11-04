@@ -115,7 +115,7 @@ test('malformed JSON is a 400, not a 500', async () => {
 })
 
 test("'wage' is stored as its own type and reduces the balance, never counted as income", async () => {
-  await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 0, openingCash: 0 })
+  await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 0 })
   assert.equal((await post(income(20000))).status, 201)
   assert.equal((await post({ ...expense(5000), type: 'wage', category: 'Worker Payment' })).status, 201)
   const rows = await list()
@@ -151,14 +151,17 @@ test("a user cannot delete or edit another user's transaction (matrix 14)", asyn
   assert.equal((await list(USER_A))[0].amount, 300)
 })
 
-test('server-side spend rule: allows recording expenses even when balance is low or zero', async () => {
-  await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 10000, openingCash: 2000 })
+test('server-side spend rule: rejects expenses when net cash would drop below 0', async () => {
+  await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 10000 })
   const spend = await post(expense(10001))
-  assert.equal(spend.status, 201)
-  const cash = await post(expense(2500, { method: 'cash' }))
-  assert.equal(cash.status, 201)
-  assert.equal((await post(expense(2500, { method: 'upi' }))).status, 201) // UPI spends do not need cash in hand
-  assert.equal((await list()).length, 3)
+  assert.equal(spend.status, 422)
+  const ok1 = await post(expense(6000, { method: 'cash' }))
+  assert.equal(ok1.status, 201)
+  const ok2 = await post(expense(4000, { method: 'upi' }))
+  assert.equal(ok2.status, 201)
+  const over = await post(expense(1, { method: 'upi' }))
+  assert.equal(over.status, 422)
+  assert.equal((await list()).length, 2)
 })
 
 test('database failure on read is a 500, never an empty ledger presented as success (C4)', async () => {
@@ -177,7 +180,7 @@ test('database failure on read is a 500, never an empty ledger presented as succ
 })
 
 test('edit changes the SAME row: 2,000 -> 3,000 leaves one transaction and a 1,000 difference (matrix 10)', async () => {
-  await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 10000, openingCash: 10000 })
+  await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 10000 })
   const t = expense(2000, { method: 'cash' })
   await post(t)
   const res = await call(tx.PATCH, 'PATCH', '/api/transactions', USER_A, { id: t.id, patch: { amount: 3000 } })
@@ -190,7 +193,7 @@ test('edit changes the SAME row: 2,000 -> 3,000 leaves one transaction and a 1,0
 })
 
 test('edit validation: invalid values rejected, overspending edits rejected, foreign project rejected', async () => {
-  await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 5000, openingCash: 5000 })
+  await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 5000 })
   const t = expense(1000, { method: 'cash' })
   await post(t)
   const patch = (p: unknown) => call(tx.PATCH, 'PATCH', '/api/transactions', USER_A, { id: t.id, patch: p })
@@ -199,10 +202,11 @@ test('edit validation: invalid values rejected, overspending edits rejected, for
   assert.equal((await patch({ method: 'x' })).status, 400)
   assert.equal((await patch({ date: '2026-02-31' })).status, 400)
   assert.equal((await patch({})).status, 400)
-  assert.equal((await patch({ amount: 5001 })).status, 200)
+  assert.equal((await patch({ amount: 5001 })).status, 422)
+  assert.equal((await patch({ amount: 5000 })).status, 200)
   const foreign = await makeProject(USER_B, 'B')
   assert.equal((await patch({ projectId: foreign })).status, 403)
-  assert.equal((await list())[0].amount, 5001)
+  assert.equal((await list())[0].amount, 5000)
 })
 
 test('delete is a soft delete: gone from every read, idempotent, 404 for unknown (matrix 9)', async () => {
@@ -225,22 +229,17 @@ test('delete is a soft delete: gone from every read, idempotent, 404 for unknown
   assert.deepEqual((await list()).map((t) => t.id), [keep.id])
 })
 
-test('settings: strict validation, opening cash stored separately, failures are errors', async () => {
+test('settings: strict validation, failures are errors', async () => {
   assert.equal((await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: '12,000' })).status, 400)
   assert.equal((await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: NaN })).status, 400)
-  assert.equal((await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 1000, openingCash: 'x' })).status, 400)
-  const ok = await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 50000, openingCash: 8000 })
+  const ok = await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 50000 })
   assert.equal(ok.status, 200)
   const got = ((await (await call(settings.GET, 'GET', '/api/settings', USER_A)).json()) as any).settings
-  assert.deepEqual(got, { openingBalance: 50000, openingCash: 8000 })
-  // a legacy profile (no opening_cash) keeps cash = balance
-  db.tables.profiles[0].opening_cash = null
-  const legacy = ((await (await call(settings.GET, 'GET', '/api/settings', USER_A)).json()) as any).settings
-  assert.deepEqual(legacy, { openingBalance: 50000, openingCash: 50000 })
+  assert.deepEqual(got, { openingBalance: 50000 })
 })
 
 test('opening balance only: no transactions => balance is the opening balance (not doubled)', async () => {
-  await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 50000, openingCash: 50000 })
+  await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 50000 })
   assert.equal((await list()).length, 0)
   const got = ((await (await call(settings.GET, 'GET', '/api/settings', USER_A)).json()) as any).settings
   assert.equal(got.openingBalance, 50000)
@@ -274,7 +273,7 @@ test('projects: strict contract value, idempotent create, delete blocked when it
 })
 
 test('concurrent expenses are both recorded and sum correctly (matrix 16)', async () => {
-  await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 10000, openingCash: 10000 })
+  await call(settings.POST, 'POST', '/api/settings', USER_A, { openingBalance: 10000 })
   const [a, b] = await Promise.all([post(expense(3000, { method: 'upi' })), post(expense(2000, { method: 'upi' }))])
   assert.equal(a.status, 201)
   assert.equal(b.status, 201)

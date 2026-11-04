@@ -19,7 +19,7 @@ export type SyncOp =
   | { type: 'delete_tx'; id: string }
   | { type: 'add_project'; project: Project }
   | { type: 'delete_project'; id: string }
-  | { type: 'settings'; openingBalance: number; openingCash: number }
+  | { type: 'settings'; openingBalance: number }
 
 export type SyncItem = SyncOp & {
   qid: string
@@ -113,7 +113,6 @@ function migrateLegacyQueue(raw: unknown[]): SyncItem[] {
         ...base,
         type: 'settings',
         openingBalance: Number(entry.payload.openingBalance),
-        openingCash: Number(entry.payload.openingCash ?? entry.payload.openingBalance),
       })
     }
   }
@@ -166,7 +165,7 @@ function requestFor(item: SyncItem): { url: string; init: RequestInit } {
     case 'settings':
       return {
         url: '/api/settings',
-        init: json('POST', { openingBalance: item.openingBalance, openingCash: item.openingCash }),
+        init: json('POST', { openingBalance: item.openingBalance }),
       }
   }
 }

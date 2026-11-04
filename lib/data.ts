@@ -48,7 +48,6 @@ export type Worker = {
 }
 
 export const DEFAULT_OPENING_BALANCE = 1000
-export const DEFAULT_OPENING_CASH = 1000
 
 export const EXPENSE_CATEGORIES = [
   'Client Payment',

@@ -3,7 +3,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DEFAULT_OPENING_BALANCE,
-  DEFAULT_OPENING_CASH,
   workers,
   type Project,
   type Transaction,
@@ -12,7 +11,6 @@ import {
 import {
   checkSpendAllowed,
   openingBalanceAt,
-  openingCashAt,
   workerDue,
   type ProjectFilter,
 } from '@/lib/ledger'
@@ -57,11 +55,8 @@ type LedgerContextValue = {
   /** Set once. Every day's opening balance is derived from it (previous day's closing). */
   openingBalance: number
   setOpeningBalance: (val: number) => void
-  openingCash: number
-  setOpeningCash: (val: number) => void
   /** Opening balance for the START of `date`: opening balance + everything dated before it. */
   getOpeningBalanceForDate: (date: string, projectFilter?: ProjectFilter) => number
-  getOpeningCashForDate: (date: string, projectFilter?: ProjectFilter) => number
   addTransaction: (tx: Omit<Transaction, 'id'>) => Promise<Transaction>
   updateTransaction: (id: string, edit: TransactionEdit) => Promise<void>
   deleteTransaction: (id: string) => Promise<void>
@@ -117,7 +112,6 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [projectsList, setProjectsList] = useState<Project[]>([])
   const [openingBalance, setOpeningBalanceState] = useState<number>(DEFAULT_OPENING_BALANCE)
-  const [openingCash, setOpeningCashState] = useState<number>(DEFAULT_OPENING_CASH)
   const [lastAdded, setLastAdded] = useState<Transaction | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isOnline, setIsOnline] = useState(true)
@@ -130,7 +124,6 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
   const txRef = useRef<Transaction[]>([])
   const projectsRef = useRef<Project[]>([])
   const balanceRef = useRef(DEFAULT_OPENING_BALANCE)
-  const cashRef = useRef(DEFAULT_OPENING_CASH)
   const refreshSeq = useRef(0)
 
   const keys = useMemo(() => (userId ? getKeys(userId) : null), [userId])
@@ -154,12 +147,10 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
   )
 
   const commitSettings = useCallback(
-    (balance: number, cash: number) => {
+    (balance: number) => {
       balanceRef.current = balance
-      cashRef.current = cash
       setOpeningBalanceState(balance)
-      setOpeningCashState(cash)
-      if (keys) writeJson(keys.settings, { openingBalance: balance, openingCash: cash })
+      if (keys) writeJson(keys.settings, { openingBalance: balance })
     },
     [keys],
   )
@@ -194,8 +185,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       commitProjects(applyPendingToProjects(pj.projects, queue))
       if (!queue.some((i) => i.type === 'settings' && i.status === 'pending')) {
         const balance = Number(sj.settings.openingBalance)
-        const cash = typeof sj.settings.openingCash === 'number' ? sj.settings.openingCash : balance
-        commitSettings(balance, cash)
+        commitSettings(balance)
       }
       setLoadError(null)
     } catch (err) {
@@ -309,10 +299,10 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     writeJson(keys.queue, queue) // persists the legacy-format migration
     const cachedTxs = readJson<Transaction[]>(keys.txs, []).filter((t) => UUID_RE.test(t.id))
     const cachedProjects = readJson<Project[]>(keys.projects, []).filter((p) => UUID_RE.test(p.id))
-    const cachedSettings = readJson<{ openingBalance: number; openingCash: number } | null>(keys.settings, null)
+    const cachedSettings = readJson<{ openingBalance: number } | null>(keys.settings, null)
     commitTxs(applyPendingToTransactions(cachedTxs, queue))
     commitProjects(applyPendingToProjects(cachedProjects, queue))
-    if (cachedSettings) commitSettings(cachedSettings.openingBalance, cachedSettings.openingCash)
+    if (cachedSettings) commitSettings(cachedSettings.openingBalance)
     refreshCounts()
 
     // 2. Push anything pending, then reconcile with the server.
@@ -343,17 +333,12 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     (date: string, projectFilter: ProjectFilter = 'all') => openingBalanceAt(date, transactions, openingBalance, projectFilter),
     [transactions, openingBalance],
   )
-  const getOpeningCashForDate = useCallback(
-    (date: string, projectFilter: ProjectFilter = 'all') => openingCashAt(date, transactions, openingCash, projectFilter),
-    [transactions, openingCash],
-  )
 
   const persistSettings = useCallback(() => {
     if (!keys) return
     enqueueOp(window.localStorage, keys.queue, {
       type: 'settings',
       openingBalance: balanceRef.current,
-      openingCash: cashRef.current,
     })
     refreshCounts()
     void flush().then(() => refresh())
@@ -363,17 +348,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     (val: number) => {
       const check = validateOpeningBalance(val)
       if (!check.valid) return
-      commitSettings(check.balance, cashRef.current)
-      persistSettings()
-    },
-    [commitSettings, persistSettings],
-  )
-
-  const setOpeningCash = useCallback(
-    (val: number) => {
-      const check = validateOpeningBalance(val)
-      if (!check.valid) return
-      commitSettings(balanceRef.current, check.balance)
+      commitSettings(check.balance)
       persistSettings()
     },
     [commitSettings, persistSettings],
@@ -410,9 +385,9 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Early feedback only: the server applies the same rule and is authoritative.
-      const check = checkSpendAllowed(txRef.current, balanceRef.current, cashRef.current, tx)
+      const check = checkSpendAllowed(txRef.current, balanceRef.current, tx)
       if (!check.ok) {
-        throw new Error(`Not enough ${check.reason === 'cash' ? 'cash in hand' : 'available balance'}: ${formatMoney(check.available)} available.`)
+        throw new Error(`Not enough net cash available: ${formatMoney(check.available)} available. Net cash cannot drop below ₹0.`)
       }
 
       const before = txRef.current
@@ -463,9 +438,9 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
       const merged = { ...current, ...patch } as Transaction
       const others = txRef.current.filter((t) => t.id !== id)
-      const check = checkSpendAllowed(others, balanceRef.current, cashRef.current, merged)
+      const check = checkSpendAllowed(others, balanceRef.current, merged)
       if (!check.ok) {
-        throw new Error(`Not enough ${check.reason === 'cash' ? 'cash in hand' : 'available balance'}: ${formatMoney(check.available)} available.`)
+        throw new Error(`Not enough net cash available: ${formatMoney(check.available)} available. Net cash cannot drop below ₹0.`)
       }
 
       const before = txRef.current
@@ -596,10 +571,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       workers,
       openingBalance,
       setOpeningBalance,
-      openingCash,
-      setOpeningCash,
       getOpeningBalanceForDate,
-      getOpeningCashForDate,
       addTransaction,
       updateTransaction,
       deleteTransaction,
@@ -621,11 +593,8 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       transactions,
       projectsList,
       openingBalance,
-      openingCash,
       setOpeningBalance,
-      setOpeningCash,
       getOpeningBalanceForDate,
-      getOpeningCashForDate,
       addTransaction,
       updateTransaction,
       deleteTransaction,

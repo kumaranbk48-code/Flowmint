@@ -76,7 +76,7 @@ export function createFakeDb() {
         const p = { ...this.payload }
         const row: Row = {
           deleted_at: null,
-          ...(this.table === 'profiles' ? { opening_balance: 1000, opening_cash: null } : {}),
+          ...(this.table === 'profiles' ? { opening_balance: 1000 } : {}),
           ...p,
           id: p.id ?? crypto.randomUUID(),
         }

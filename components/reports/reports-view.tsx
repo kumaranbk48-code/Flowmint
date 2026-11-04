@@ -91,7 +91,6 @@ export function ReportsView() {
     transactions,
     projects,
     getOpeningBalanceForDate,
-    getOpeningCashForDate,
   } = useLedger()
   const { business, user } = useAuth()
   const today = useToday()
@@ -244,10 +243,6 @@ export function ReportsView() {
     return getOpeningBalanceForDate(startDate, projectFilter)
   }, [getOpeningBalanceForDate, startDate, projectFilter])
 
-  const effectiveOpeningCash = useMemo(() => {
-    return getOpeningCashForDate(startDate, projectFilter)
-  }, [getOpeningCashForDate, startDate, projectFilter])
-
   // Compute running balance in chronological order
   const txsWithBalance = useMemo(() => {
     return computeRunningBalances(filteredTxs, effectiveOpeningBalance)
@@ -255,8 +250,8 @@ export function ReportsView() {
 
   // Financial summary
   const summary = useMemo(() => {
-    return getFinancialSummary(filteredTxs, effectiveOpeningBalance, effectiveOpeningCash)
-  }, [filteredTxs, effectiveOpeningBalance, effectiveOpeningCash])
+    return getFinancialSummary(filteredTxs, effectiveOpeningBalance)
+  }, [filteredTxs, effectiveOpeningBalance])
 
   const dateRangeLabel = formatDateRangeLabel(startDate, endDate, dateMode, today)
 

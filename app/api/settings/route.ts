@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   }
 }
 
-/** Body: { openingBalance, openingCash? }. The opening balance is set once; every day's opening is derived from it. */
+/** Body: { openingBalance }. The opening balance is set once; every day's opening is derived from it. */
 export async function POST(req: Request) {
   const g = guard(req)
   if (isResponse(g)) return g
@@ -26,17 +26,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid openingBalance format or value out of bounds.' }, { status: 400 })
     }
 
-    let openingCash: number | undefined
-    if (body?.openingCash !== undefined && body?.openingCash !== null) {
-      const cash = validateOpeningBalance(body.openingCash)
-      if (!cash.valid) {
-        return NextResponse.json({ error: 'Invalid openingCash format or value out of bounds.' }, { status: 400 })
-      }
-      openingCash = cash.balance
-    }
-
-    await updateDbSettings(g.userId, { openingBalance: bal.balance, openingCash })
-    return NextResponse.json({ success: true, openingBalance: bal.balance, openingCash })
+    await updateDbSettings(g.userId, { openingBalance: bal.balance })
+    return NextResponse.json({ success: true, openingBalance: bal.balance })
   } catch (err) {
     console.error('Error updating settings:', err)
     return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 })

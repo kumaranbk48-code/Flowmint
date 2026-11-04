@@ -28,7 +28,6 @@ export function DashboardView() {
     transactions,
     projects,
     getOpeningBalanceForDate,
-    getOpeningCashForDate,
     isLoading,
   } = useLedger()
   const { business, user } = useAuth()
@@ -37,7 +36,6 @@ export function DashboardView() {
   const today = useToday()
   // Opening balance is set once; today's opening = yesterday's closing (opening balance + everything dated before today).
   const todayOpeningBalance = getOpeningBalanceForDate(today)
-  const todayOpeningCash = getOpeningCashForDate(today)
   const hasEarlierActivity = transactions.some((t) => t.date < today)
 
   const firstName = (business.ownerName || user?.name || '').trim().split(' ')[0]
@@ -58,8 +56,8 @@ export function DashboardView() {
 
   // Financial summary for today
   const summary = useMemo(() => {
-    return getFinancialSummary(todayRawTxs, todayOpeningBalance, todayOpeningCash)
-  }, [todayRawTxs, todayOpeningBalance, todayOpeningCash])
+    return getFinancialSummary(todayRawTxs, todayOpeningBalance)
+  }, [todayRawTxs, todayOpeningBalance])
 
   const projectMap = useMemo(() => {
     return new Map<string, Project>(projects.map((p) => [p.id, p]))
@@ -108,7 +106,7 @@ export function DashboardView() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {/* Opening Balance: carried forward from the previous day's closing balance */}
             <div className="relative flex flex-col justify-between rounded-xl border bg-card p-4 shadow-xs transition-all hover:border-primary/40">
               <span className="text-xs font-semibold text-muted-foreground">Opening Balance</span>
@@ -117,7 +115,7 @@ export function DashboardView() {
                   {formatMoney(summary.openingBalance)}
                 </p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  {hasEarlierActivity ? "Yesterday's closing balance" : 'Starting balance (set once in Settings)'}
+                  {hasEarlierActivity ? "Yesterday's closing balance" : 'Starting balance (set in Settings)'}
                 </p>
               </div>
             </div>
@@ -154,37 +152,20 @@ export function DashboardView() {
               </p>
             </div>
 
-            {/* Net Balance (Visually Important) */}
-            <div className="rounded-xl border-2 border-foreground/20 bg-card p-4 shadow-md sm:col-span-1">
+            {/* Net Cash */}
+            <div className="rounded-xl border-2 border-primary/40 bg-card p-4 shadow-md">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  Net Balance
+                  Net Cash
                 </span>
                 <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
-                  Live
+                  Live Net Cash
                 </span>
               </div>
               <p className="num mt-2 text-2xl font-black tracking-tight text-foreground md:text-3xl">
                 {formatMoney(summary.netBalance)}
               </p>
-              <p className="mt-1 text-[11px] font-medium text-muted-foreground">Available balance</p>
-            </div>
-
-            {/* Current Cash (Visually Important) */}
-            <div className="rounded-xl border-2 border-primary/40 bg-primary-soft/40 p-4 shadow-md sm:col-span-2 lg:col-span-1">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-foreground">
-                  <Wallet className="size-3.5 text-primary" />
-                  Current Cash
-                </span>
-                <span className="inline-flex items-center rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">
-                  In Hand
-                </span>
-              </div>
-              <p className="num mt-2 text-2xl font-black tracking-tight text-foreground md:text-3xl">
-                {formatMoney(summary.currentCash)}
-              </p>
-              <p className="mt-1 text-[11px] font-medium text-muted-foreground">Physical cash on site</p>
+              <p className="mt-1 text-[11px] font-medium text-muted-foreground">Opening + Credit − Debit</p>
             </div>
           </div>
         </section>

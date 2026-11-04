@@ -29,10 +29,8 @@ const bad = (error: string, status = 400, extra: Record<string, unknown> = {}) =
   NextResponse.json({ error, ...extra }, { status })
 
 function spendError(check: Extract<ReturnType<typeof checkSpendAllowed>, { ok: false }>) {
-  const what = check.reason === 'cash' ? 'cash in hand' : 'available balance'
-  return bad(`Not enough ${what}: ${formatMoney(check.available)} available.`, 422, {
+  return bad(`Not enough net cash available: ${formatMoney(check.available)} available. Net cash cannot drop below ₹0.`, 422, {
     code: 'INSUFFICIENT_FUNDS',
-    reason: check.reason,
     available: check.available,
   })
 }
@@ -120,7 +118,7 @@ export async function POST(req: Request) {
     // Server-side spend rule (authoritative; the client check is only early feedback).
     if (type !== 'income') {
       const basis = await getDbLedgerBasis(g.userId)
-      const check = checkSpendAllowed(basis.transactions, basis.openingBalance, basis.openingCash, candidate)
+      const check = checkSpendAllowed(basis.transactions, basis.openingBalance, candidate)
       if (!check.ok) return spendError(check)
     }
 
@@ -192,7 +190,7 @@ export async function PATCH(req: Request) {
     if (merged.type !== 'income') {
       const basis = await getDbLedgerBasis(g.userId)
       const others = basis.transactions.filter((x) => x.id !== id)
-      const check = checkSpendAllowed(others, basis.openingBalance, basis.openingCash, merged)
+      const check = checkSpendAllowed(others, basis.openingBalance, merged)
       if (!check.ok) return spendError(check)
     }
 

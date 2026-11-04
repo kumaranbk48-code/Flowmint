@@ -6,7 +6,6 @@ import {
   computeRunningBalances,
   getFinancialSummary,
   openingBalanceAt,
-  openingCashAt,
   projectStats,
   summarise,
 } from '../lib/ledger'
@@ -28,9 +27,9 @@ const tx = (type: TxType, amount: number, date = '2026-10-30', method: PayMethod
 })
 
 test('matrix 1-3: balance = opening + credits - debits (wage is a debit)', () => {
-  assert.equal(getFinancialSummary([tx('income', 5000), tx('expense', 2000)], 10000, 0).netBalance, 13000)
-  assert.equal(getFinancialSummary([tx('income', 10000), tx('wage', 4000)], 0, 0).netBalance, 6000)
-  const s = getFinancialSummary([tx('income', 10000), tx('expense', 3000), tx('wage', 2000)], 20000, 0)
+  assert.equal(getFinancialSummary([tx('income', 5000), tx('expense', 2000)], 10000).netBalance, 13000)
+  assert.equal(getFinancialSummary([tx('income', 10000), tx('wage', 4000)], 0).netBalance, 6000)
+  const s = getFinancialSummary([tx('income', 10000), tx('expense', 3000), tx('wage', 2000)], 20000)
   assert.equal(s.netBalance, 25000)
   assert.equal(s.creditReceived, 10000)
   assert.equal(s.debitSpent, 5000)
@@ -38,25 +37,23 @@ test('matrix 1-3: balance = opening + credits - debits (wage is a debit)', () =>
 
 test('spec section 4: 20,000 + 15,000 credits - 6,000 debits = 29,000', () => {
   const txs = [tx('income', 10000), tx('income', 5000), tx('expense', 3000), tx('wage', 2000), tx('expense', 1000)]
-  assert.equal(getFinancialSummary(txs, 20000, 0).netBalance, 29000)
+  assert.equal(getFinancialSummary(txs, 20000).netBalance, 29000)
 })
 
-test('matrix 4-6: only cash transactions move physical cash', () => {
-  assert.equal(getFinancialSummary([tx('income', 5000, '2026-10-30', 'upi')], 10000, 10000).currentCash, 10000)
-  assert.equal(getFinancialSummary([tx('income', 5000, '2026-10-30', 'upi')], 10000, 10000).netBalance, 15000)
-  assert.equal(getFinancialSummary([tx('income', 5000), tx('expense', 2000)], 10000, 10000).currentCash, 13000)
-  assert.equal(getFinancialSummary([tx('expense', 2000, '2026-10-30', 'upi')], 10000, 10000).currentCash, 10000)
+test('net balance: opening balance + credits - debits', () => {
+  assert.equal(getFinancialSummary([tx('income', 5000, '2026-10-30', 'upi')], 10000).netBalance, 15000)
+  assert.equal(getFinancialSummary([tx('income', 5000), tx('expense', 2000)], 10000).netBalance, 13000)
+  assert.equal(getFinancialSummary([tx('expense', 2000, '2026-10-30', 'upi')], 10000).netBalance, 8000)
 })
 
 test('opening balance alone is the balance (not doubled)', () => {
-  const s = getFinancialSummary([], 50000, 50000)
+  const s = getFinancialSummary([], 50000)
   assert.equal(s.netBalance, 50000)
 })
 
 test('balances are NOT clamped at zero: an overdrawn ledger shows the real negative number', () => {
-  const s = getFinancialSummary([tx('expense', 3000)], 1000, 1000)
+  const s = getFinancialSummary([tx('expense', 3000)], 1000)
   assert.equal(s.netBalance, -2000)
-  assert.equal(s.currentCash, -2000)
   const running = computeRunningBalances([tx('expense', 3000), tx('income', 500, '2026-10-31')], 1000)
   assert.deepEqual(running.map((r) => r.balanceAfter), [-2000, -1500])
   assert.equal(summarise([tx('expense', 3000)]).net, -3000)
@@ -70,14 +67,8 @@ test('CARRY-FORWARD: each day opens with the previous day closing balance', () =
   assert.equal(openingBalanceAt('2026-11-01', txs, 10000), 13000) // dashboard on 1 Nov
   // closing(day) === opening(next day)
   const day31 = txs.filter((t) => t.date === '2026-10-31')
-  const closing31 = getFinancialSummary(day31, openingBalanceAt('2026-10-31', txs, 10000), 0).netBalance
+  const closing31 = getFinancialSummary(day31, openingBalanceAt('2026-10-31', txs, 10000)).netBalance
   assert.equal(closing31, openingBalanceAt('2026-11-01', txs, 10000))
-})
-
-test('carry-forward for cash ignores non-cash days', () => {
-  const txs = [tx('income', 5000, '2026-10-30', 'upi'), tx('expense', 1000, '2026-10-30', 'cash')]
-  assert.equal(openingCashAt('2026-10-31', txs, 10000), 9000)
-  assert.equal(openingBalanceAt('2026-10-31', txs, 10000), 14000)
 })
 
 test('project view: starts from 0, never includes the business opening balance or another project', () => {
@@ -127,7 +118,7 @@ test('money is summed in integer paise: no floating-point drift', () => {
   assert.equal(sumRupees([0.1, 0.2]), 0.3)
   assert.equal(sumRupees([0.1, 0.2, 0.3]), 0.6)
   assert.equal(sumRupees([1000.1, 2000.2, 3000.3]), 6000.6)
-  const s = getFinancialSummary([tx('income', 0.1), tx('income', 0.2)], 0, 0)
+  const s = getFinancialSummary([tx('income', 0.1), tx('income', 0.2)], 0)
   assert.equal(s.creditReceived, 0.3)
 })
 
@@ -146,15 +137,17 @@ test('running balance order is deterministic, whatever order the rows arrive in'
   assert.deepEqual(computeRunningBalances([y, x], 100).map((r) => r.id), computeRunningBalances([x, y], 100).map((r) => r.id))
 })
 
-test('spend rule: allows recording expenses so contractors are never blocked', () => {
+test('spend rule: does not let net cash drop below 0', () => {
   const existing = [tx('income', 5000, '2026-10-30', 'upi')]
-  // opening 1000 (all cash), UPI income 5000 => balance 6000, cash 1000
-  assert.deepEqual(checkSpendAllowed(existing, 1000, 1000, { type: 'expense', amount: 6000, method: 'upi' }), { ok: true })
-  const cash = checkSpendAllowed(existing, 1000, 1000, { type: 'expense', amount: 2000, method: 'cash' })
-  assert.equal(cash.ok, true)
-  const net = checkSpendAllowed(existing, 1000, 1000, { type: 'wage', amount: 6000.01, method: 'bank' })
-  assert.equal(net.ok, true)
-  assert.deepEqual(checkSpendAllowed(existing, 1000, 1000, { type: 'income', amount: 999999, method: 'cash' }), { ok: true })
+  // opening 1000, income 5000 => available net cash 6000
+  assert.deepEqual(checkSpendAllowed(existing, 1000, { type: 'expense', amount: 6000 }), { ok: true })
+  const over = checkSpendAllowed(existing, 1000, { type: 'expense', amount: 6000.01 })
+  assert.equal(over.ok, false)
+  if (!over.ok) {
+    assert.equal(over.reason, 'balance')
+    assert.equal(over.available, 6000)
+  }
+  assert.deepEqual(checkSpendAllowed(existing, 1000, { type: 'income', amount: 999999 }), { ok: true })
 })
 
 test('dates are India time, never UTC', () => {

@@ -132,16 +132,12 @@ export function computeRunningBalances(txs: Transaction[], openingBalance: numbe
   })
 }
 
-export function getFinancialSummary(txs: Transaction[], openingBalance: number = 0, openingCash: number = 0) {
+export function getFinancialSummary(txs: Transaction[], openingBalance: number = 0) {
   const creditReceived = sumRupees(txs.filter(isCredit).map((t) => t.amount))
   const debitSpent = sumRupees(txs.filter(isDebit).map((t) => t.amount))
   const netBalance = fromPaise(toPaise(openingBalance) + toPaise(creditReceived) - toPaise(debitSpent))
 
-  const cashIn = sumRupees(txs.filter((t) => isCredit(t) && t.method === 'cash').map((t) => t.amount))
-  const cashOut = sumRupees(txs.filter((t) => isDebit(t) && t.method === 'cash').map((t) => t.amount))
-  const currentCash = fromPaise(toPaise(openingCash) + toPaise(cashIn) - toPaise(cashOut))
-
-  return { openingBalance, creditReceived, debitSpent, netBalance, currentCash, openingCash }
+  return { openingBalance, creditReceived, debitSpent, netBalance, netCash: netBalance }
 }
 
 export type ProjectFilter = 'all' | 'none' | string
@@ -173,31 +169,27 @@ export function openingBalanceAt(
   return fromPaise(base + delta)
 }
 
-/** Same carry-forward rule for physical cash (cash-method transactions only). */
-export function openingCashAt(
-  date: string,
-  txs: Transaction[],
-  openingCash: number,
-  projectFilter: ProjectFilter = 'all',
-): number {
-  const base = projectFilter === 'all' ? toPaise(openingCash) : 0
-  const earlier = txs.filter((t) => t.date < date && t.method === 'cash' && matchesProjectFilter(t, projectFilter))
-  const delta = earlier.reduce((acc, t) => acc + (isCredit(t) ? toPaise(t.amount) : -toPaise(t.amount)), 0)
-  return fromPaise(base + delta)
-}
-
-export type SpendCheck = { ok: true } | { ok: false; reason: 'net' | 'cash'; available: number }
+export type SpendCheck = { ok: true } | { ok: false; reason: 'balance'; available: number }
 
 /**
- * The rule for checking whether a debit can be recorded.
- * In a contractor cashbook, real-world expenses and wages must always be recordable
- * even if the balance or cash-in-hand is zero or temporarily overdrawn.
+ * Spend validation rule: Net cash must never drop below ₹0.
+ * Net Cash = Opening Balance + Total Credit (Inflow) - Total Debit (Outflow).
  */
 export function checkSpendAllowed(
-  _existing: Transaction[],
-  _openingBalance: number,
-  _openingCash: number,
-  _candidate: Pick<Transaction, 'type' | 'amount' | 'method'>,
+  existing: Transaction[],
+  openingBalance: number,
+  candidate: Pick<Transaction, 'type' | 'amount'>,
 ): SpendCheck {
+  if (candidate.type === 'income') return { ok: true }
+
+  const summary = getFinancialSummary(existing, openingBalance)
+  const available = summary.netBalance
+  const candidatePaise = toPaise(candidate.amount)
+  const availablePaise = toPaise(available)
+
+  if (candidatePaise > availablePaise) {
+    return { ok: false, reason: 'balance', available: Math.max(0, available) }
+  }
+
   return { ok: true }
 }

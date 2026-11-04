@@ -288,11 +288,10 @@ export async function deleteDbProject(
   return 'deleted'
 }
 
-export type DbSettings = { openingBalance: number; openingCash: number }
+export type DbSettings = { openingBalance: number }
 
 /**
- * Opening balance and opening cash. A profile with no stored opening_cash (created before this
- * column existed) keeps the old behaviour: opening cash equals opening balance.
+ * Opening balance set for the business ledger.
  */
 export async function getDbSettings(userId: string): Promise<DbSettings> {
   const profile = await ensureProfileExists(userId)
@@ -301,18 +300,14 @@ export async function getDbSettings(userId: string): Promise<DbSettings> {
   const rawBalance = profile.opening_balance
   const openingBalance =
     rawBalance !== undefined && rawBalance !== null ? Number(rawBalance) : DEFAULT_OPENING_BALANCE
-  const rawCash = profile.opening_cash
-  const openingCash = rawCash !== undefined && rawCash !== null ? Number(rawCash) : openingBalance
-  return { openingBalance, openingCash }
+  return { openingBalance }
 }
 
-export async function updateDbSettings(userId: string, settings: { openingBalance: number; openingCash?: number }) {
+export async function updateDbSettings(userId: string, settings: { openingBalance: number }) {
   const profile = await ensureProfileExists(userId)
   if (!profile) throw new Error('Profile unavailable')
 
   const update: Record<string, unknown> = { opening_balance: settings.openingBalance }
-  if (settings.openingCash !== undefined) update.opening_cash = settings.openingCash
-
   const { error } = await supabaseAdmin.from('profiles').update(update).eq('id', userId)
   if (error) throw error
 }
@@ -320,5 +315,5 @@ export async function updateDbSettings(userId: string, settings: { openingBalanc
 /** Everything the spend check needs, in one place (server-side source of truth). */
 export async function getDbLedgerBasis(userId: string) {
   const [transactions, settings] = await Promise.all([getDbTransactions(userId), getDbSettings(userId)])
-  return { transactions, ...settings }
+  return { transactions, openingBalance: settings.openingBalance }
 }

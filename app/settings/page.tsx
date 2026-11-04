@@ -13,14 +13,11 @@ export default function SettingsPage() {
   const {
     openingBalance,
     setOpeningBalance,
-    openingCash,
-    setOpeningCash,
   } = useLedger()
   const { business, user } = useAuth()
 
   // Local state for settings form
   const [balanceInput, setBalanceInput] = useState(String(openingBalance))
-  const [cashInput, setCashInput] = useState(String(openingCash))
   const [voiceLanguage, setVoiceLanguage] = useState<'ta-IN' | 'en-IN' | 'hi-IN'>('en-IN')
   const [autoSpeechPrompt, setAutoSpeechPrompt] = useState(true)
   const [savedSuccess, setSavedSuccess] = useState(false)
@@ -30,30 +27,18 @@ export default function SettingsPage() {
     setBalanceInput(String(openingBalance))
   }, [openingBalance])
 
-  useEffect(() => {
-    setCashInput(String(openingCash))
-  }, [openingCash])
-
   const handleSaveFinances = (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMessage('')
     // Strict: '12,000', '100abc' etc. are rejected instead of being silently read as a different number.
     const balanceCheck = validateOpeningBalance(balanceInput.trim())
-    const cashCheck = validateOpeningBalance(cashInput.trim())
-    if (!balanceCheck.valid || !cashCheck.valid || balanceCheck.balance < 0 || cashCheck.balance < 0) {
-      setErrorMessage('Please enter valid amounts (digits with at most 2 decimals, no commas or symbols).')
+    if (!balanceCheck.valid || balanceCheck.balance < 0) {
+      setErrorMessage('Please enter a valid amount (digits with at most 2 decimals, no commas or symbols).')
       return
     }
     const parsedBalance = balanceCheck.balance
-    const parsedCash = cashCheck.balance
-
-    if (parsedCash > parsedBalance) {
-      setErrorMessage('Starting cash in hand cannot be more than the opening balance (cash is part of the balance).')
-      return
-    }
 
     setOpeningBalance(parsedBalance)
-    setOpeningCash(parsedCash)
     setSavedSuccess(true)
     setTimeout(() => setSavedSuccess(false), 2500)
   }
@@ -100,14 +85,14 @@ export default function SettingsPage() {
         >
           <form onSubmit={handleSaveFinances} className="flex flex-col gap-4">
             <p className="text-xs text-muted-foreground">
-              Set these once, when you start using FlowMint. Every day then opens with the previous day&apos;s closing balance
-              automatically. Changing them later re-states the balance of every day and every report, so only change them to correct a mistake.
+              Set this once, when you start using FlowMint. Every day then opens with the previous day&apos;s closing balance
+              automatically. Changing it later re-states the balance of every day and every report, so only change it to correct a mistake.
             </p>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="max-w-md">
               <div>
                 <label htmlFor="opening-balance" className="block text-xs font-semibold text-foreground">
-                  Opening Balance (₹): total money you start with
+                  Opening Balance (₹): starting net cash of your business
                 </label>
                 <div className="relative mt-1.5">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
@@ -125,29 +110,6 @@ export default function SettingsPage() {
                 </div>
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   Current: {formatMoney(openingBalance)}
-                </p>
-              </div>
-
-              <div>
-                <label htmlFor="opening-cash" className="block text-xs font-semibold text-foreground">
-                  Starting Cash in Hand (₹): the part of it held as physical cash
-                </label>
-                <div className="relative mt-1.5">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-muted-foreground">
-                    ₹
-                  </span>
-                  <input
-                    id="opening-cash"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={cashInput}
-                    onChange={(e) => setCashInput(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-input bg-card pl-7 pr-3 text-sm font-semibold text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
-                  />
-                </div>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Current: {formatMoney(openingCash)}
                 </p>
               </div>
             </div>

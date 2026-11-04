@@ -299,6 +299,8 @@ export function VoiceView() {
     (t: Transaction) => t.date === todayISO() && t.source === 'voice',
   )
 
+  const [confirmError, setConfirmError] = useState<string | null>(null)
+
   // Confirm and Save action
   const handleConfirmSave = async (txData: {
     type: TxType
@@ -312,6 +314,7 @@ export function VoiceView() {
   }) => {
     if (isSaving) return
     setIsSaving(true)
+    setConfirmError(null)
 
     try {
       const saved = await addTransaction({
@@ -331,7 +334,7 @@ export function VoiceView() {
     } catch (err: unknown) {
       console.error('Failed to confirm and save transaction:', err)
       const msg = err instanceof Error ? err.message : 'Failed to save transaction.'
-      alert(msg)
+      setConfirmError(msg)
     } finally {
       setIsSaving(false)
     }
@@ -1126,6 +1129,13 @@ export function VoiceView() {
                       </p>
                     </div>
                   </div>
+
+                  {confirmError && (
+                    <div className="mt-4 flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs font-semibold text-destructive animate-in fade-in">
+                      <AlertCircle className="size-4 shrink-0" />
+                      <span>{confirmError}</span>
+                    </div>
+                  )}
 
                   {/* Actions: Confirm & Save, Edit, Discard */}
                   <div className="mt-6 flex flex-col-reverse gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
